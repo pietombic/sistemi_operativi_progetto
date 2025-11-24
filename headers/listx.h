@@ -241,7 +241,7 @@ static inline struct list_head *list_prev(const struct list_head *current) {
 /*
     Macro che costruisce un ciclo for per iterare sul contenuto di una lista;
     l'unica differenza dispetto a list_for_each e' che la variabile pos punta
-     alla struttura che contiene il campo member anziche' al campo stesso.
+    alla struttura che contiene il campo member anziche' al campo stesso.
 
     pos: puntatore da utilizzare per iterare sul contenuto della lista
     head: inizio della lista (elemento sentinella)
