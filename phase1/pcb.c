@@ -23,6 +23,9 @@ int emptyProcQ(struct list_head* head) {
 void insertProcQ(struct list_head* head, pcb_t* p) {
     //se la coda dei processi non è vuota cerco la posizione giusta
     if (!emptyProcQ(head)){
+        //prova per vedere come funziona il klog
+        klog_print("Coda non vuota->inserisco p: ");
+
         struct list_head* pos;
         //macro che itera su ogni elemento della lista head attraverso il puntatore pos
         list_for_each(pos, head) { 
