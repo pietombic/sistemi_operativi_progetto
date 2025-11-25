@@ -30,7 +30,7 @@ pcb_t* allocPcb() {
     p->p_parent = NULL;
     INIT_LIST_HEAD(&p->p_child);
     INIT_LIST_HEAD(&p->p_sib);
-    p->p_s = 0;
+    p->p_s = (state_t){0};
     p->p_time = 0;
     p->p_semAdd = NULL;
     p->p_supportStruct = NULL;
