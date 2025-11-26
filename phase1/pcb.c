@@ -83,9 +83,30 @@ void insertProcQ(struct list_head* head, pcb_t* p) {
 }
 
 pcb_t* headProcQ(struct list_head* head) {
+    // coda vuota -> ritorno NULL
+    if (emptyProcQ(head)) {
+        return NULL;
+    }
+    else {
+        struct list_head* first = head->next;
+        pcb_t* p = container_of(first, pcb_t, p_list);
+        return p;
+    }
 }
 
 pcb_t* removeProcQ(struct list_head* head) {
+    // coda vuota -> ritorno NULL
+    if (emptyProcQ(head)) {
+        return NULL;
+    }
+    else {
+        //puntatore al primo elemento della lista (da rimuovere)
+        struct list_head* first = head->next;
+        list_del(first);
+        //ritorno il puntatore al pcb corrispondente
+        pcb_t* p = container_of(first, pcb_t, p_list);
+        return p;
+    }
 }
 
 pcb_t* outProcQ(struct list_head* head, pcb_t* p) {
