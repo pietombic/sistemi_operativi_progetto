@@ -5,6 +5,11 @@ static pcb_t pcbFree_table[MAXPROC];
 static int next_pid = 1;
 
 void initPcbs() {
+    INIT_LIST_HEAD(&pcbFree_h);                             // inizializzo la lista dei pcb liberi  
+
+    for(int x = 0; x < MAXPROC; x++) {
+        list_add(&pcbFree_table[x].p_list, &pcbFree_h);     // aggiungo ogni pcb della table[maxproc] alla lista dei pcb liberi
+    }
 }
 
 void freePcb(pcb_t* p) {
@@ -40,6 +45,7 @@ pcb_t* allocPcb() {
 }
 
 void mkEmptyProcQ(struct list_head* head) {
+    INIT_LIST_HEAD(head);                       // inizializzo la lista passata come parametro
 }
 
 int emptyProcQ(struct list_head* head) {
