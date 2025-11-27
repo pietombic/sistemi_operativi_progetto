@@ -1,5 +1,8 @@
 #include <stdio.h>
-#include "pcb.h"   // o il nome del tuo file header
+#include "../headers/const.h"
+#include "../headers/types.h"
+#include "./headers/pcb.h"
+
 
 int main() {
     // 1. inizializza la lista dei PCB liberi
