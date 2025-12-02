@@ -53,33 +53,23 @@ int emptyProcQ(struct list_head* head) {
 }
 
 void insertProcQ(struct list_head* head, pcb_t* p) {
-    //se la coda dei processi non è vuota cerco la posizione giusta
-    if (!emptyProcQ(head)){
-        //prova per vedere come funziona il klog
-        klog_print("Coda non vuota->inserisco p: ");
-
-        struct list_head* pos;
-        //macro che itera su ogni elemento della lista head attraverso il puntatore pos
-        list_for_each(pos, head) { 
-            //prendo la struttura dati puntata da pos 
-            pcb_t* current = container_of(pos, pcb_t, p_list);
-            //caso in cui siamo arrivati alla fine della lista -> aggiungiamo in coda
-            if (list_is_last(pos, head)) {
-                list_add_tail(&p->p_list, head);
-                return;
-            }
-            //controllo se la priorità del processo da inserire è minore di quella del processo corrente
-            //in caso positivo inserisco
-            else if (p->p_prio < current->p_prio) {
-                //funzione che inserisce l'elemento new tra prev (di dove mi sono fermato) e dove mi sono fermato (pos)
-                __list_add(&p->p_list, pos->prev, pos);
-                return;
-            }
+    if (emptyProcQ(head)) {
+        list_add(&p->p_list, head);
+        return;
+    }
+    
+    struct list_head* pos;
+    list_for_each(pos, head) {
+        pcb_t* current = container_of(pos, pcb_t, p_list);
+        // Se troviamo un processo con priorità minore, inseriamo prima di lui
+        if (p->p_prio > current->p_prio) {
+            __list_add(&p->p_list, pos->prev, pos);
+            return;
         }
     }
-    else {
-        list_add_tail(&p->p_list, head);
-    }
+    
+    // Se arriviamo qui, nessuno ha priorità minore -> mettiamo in coda
+    list_add_tail(&p->p_list, head);
 }
 
 pcb_t* headProcQ(struct list_head* head) {
