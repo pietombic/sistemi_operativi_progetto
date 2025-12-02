@@ -30,9 +30,9 @@ int main() {
         printf("ERRORE: coda non vuota!\n");
 
     // 4. Inserisci processi con priorità diverse
-    pcb_t *a = allocPcb(); a->priority = 20;
-    pcb_t *b = allocPcb(); b->priority = 10;
-    pcb_t *c = allocPcb(); c->priority = 0;
+    pcb_t *a = allocPcb(); a->p_prio = 20;
+    pcb_t *b = allocPcb(); b->p_prio = 10;
+    pcb_t *c = allocPcb(); c->p_prio = 0;
 
     insertProcQ(&queue, a);
     insertProcQ(&queue, b);
@@ -44,7 +44,7 @@ int main() {
     pcb_t *iter;
     printf("Ordine nella coda:\n");
     list_for_each_entry(iter, &queue, p_list) {
-        printf("%d ", iter->priority);
+        printf("%d ", iter->p_prio);
     }
     printf("\n");
 
