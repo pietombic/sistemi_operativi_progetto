@@ -16,6 +16,16 @@ void freePcb(pcb_t* p) {
     list_add(&p->p_list, &pcbFree_h);
 }
 
+#include <stddef.h>
+/* semplice implementatione di memset per toolchain freestanding */
+void *memset(void *s, int c, size_t n) {
+    unsigned char *p = (unsigned char *)s;
+    while (n--) {
+        *p++ = (unsigned char)c;
+    }
+    return s;
+}
+
 pcb_t* allocPcb() {
     // se la lista è vuota ritorno NULL
     if(list_empty(&pcbFree_h)) {
