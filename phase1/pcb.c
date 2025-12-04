@@ -136,9 +136,13 @@ pcb_t* outProcQ(struct list_head* head, pcb_t* p) {
 }
 
 int emptyChild(pcb_t* p) {
+    return list_empty(&p->p_child); // controllo se la lista dei figli è vuota
 }
 
 void insertChild(pcb_t* prnt, pcb_t* p) {
+    p->p_parent = prnt; // imposto il genitore del processo p
+
+    list_add_tail(&p->p_sib, &prnt->p_child); // inserisco p nella lista dei figli di prnt usando il campo p_child come testa della lista e p_sib come nodo della lista
 }
 
 // Rimuove e ritorna il primo figlio del processo puntato da p
