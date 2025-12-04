@@ -109,7 +109,30 @@ pcb_t* removeProcQ(struct list_head* head) {
     }
 }
 
+
+
+// rimuove dalla coda puntata da head il puntatore p
+// - se p non è presente restituisce null
+// - se p è presente lo rimuove e restituisce
 pcb_t* outProcQ(struct list_head* head, pcb_t* p) {
+    // se la lista è vuota ritorno NULL
+    if(list_empty(head)) {
+        return NULL;
+    
+    }
+
+    struct list_head* pos;
+    list_for_each(pos, head) {
+        pcb_t* current = container_of(pos, pcb_t, p_list);
+        // caso in cui si sia trovato l'elemento
+        if(current == p){
+            list_del(&p->p_list);
+            return p;
+        }
+    }
+    // se arrivo qui non ho trovato l'elemento
+    return NULL;
+
 }
 
 int emptyChild(pcb_t* p) {
@@ -118,7 +141,19 @@ int emptyChild(pcb_t* p) {
 void insertChild(pcb_t* prnt, pcb_t* p) {
 }
 
+// Rimuove e ritorna il primo figlio del processo puntato da p
 pcb_t* removeChild(pcb_t* p) {
+    // Se p non ha figli ritorno NULL
+    if(emptyChild(p)) {
+        return NULL;
+    }
+    // prendo il primo figlio dalla lista dei figli
+    struct list_head* first = p->p_child.next;
+    list_del(first);
+    pcb_t* child = container_of(first, pcb_t, p_sib);
+    child->p_parent = NULL; // il figlio non ha più un genitore
+    return child;
+
 }
 
 pcb_t* outChild(pcb_t* p) {
