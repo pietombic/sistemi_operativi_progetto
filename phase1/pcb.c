@@ -160,5 +160,19 @@ pcb_t* removeChild(pcb_t* p) {
 
 }
 
+/*
+make the PCB pointed to by p no longer the
+child of its parent. If the PCB pointed to by p has no parent, return NULL;
+otherwise, return p. Note that the element pointed to by p could be in an
+arbitrary position (i.e. not be the first child of its parent).
+*/
+
 pcb_t* outChild(pcb_t* p) {
+    if (p == NULL || p->p_parent == NULL) {
+        return NULL;
+    }else{
+        list_del(&p->p_sib);
+        p->p_parent = NULL;
+        return p;
+    }
 }
