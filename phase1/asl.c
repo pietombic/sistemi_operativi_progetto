@@ -94,17 +94,13 @@ pcb_t* removeBlocked(int* semAdd) {
         return p;
     }
 }
-/*
-remove the PCB pointed to by p from the
-process queue associated with p’s semaphore on the ASL. If PCB pointed to by p
-does not appear in the process queue associated with p’s semaphore, which is an
-error condition, return NULL; otherwise, return p
-*/
+
+////rimuove e ritorna il PCB in testa alla coda dei processi bloccati sul semaforo con indirizzo semAdd
 pcb_t* outBlocked(pcb_t* p) {
     // Cerca il descrittore di semaforo nella ASL
     semd_t* semd = NULL;
     struct list_head* pos;
-    
+    //itero tutta la lista dei semd per trovare quello con chiave = p->p_semAdd
     list_for_each(pos, &semd_h) {
         semd_t* current = container_of(pos, semd_t, s_link);
         if (current->s_key == p->p_semAdd) {
@@ -117,20 +113,16 @@ pcb_t* outBlocked(pcb_t* p) {
     if (semd == NULL) {
         return NULL;
     }
-    
+    //lo rimuovo dalla coda dei processi bloccati sul semaforo e lo ritorno
     return outProcQ(&semd->s_procq, p);
 }
-/*
-return a pointer to the PCB that is at
-the head of the process queue associated with the semaphore semAdd. Return
-NULL if semAdd is not found on the ASL or if the process queue associated with
-semAdd is empty.
-*/
+
+//ritorna il puntatore al PCB in testa alla coda dei processi bloccati sul semaforo con indirizzo semAdd
 pcb_t* headBlocked(int* semAdd) {
     // Cerca il descrittore di semaforo nella ASL
     semd_t* semd = NULL;
     struct list_head* pos;
-    
+    //itero tutta la lista dei semd per trovare quello con chiave = semAdd
     list_for_each(pos, &semd_h) {
         semd_t* current = container_of(pos, semd_t, s_link);
         if (current->s_key == semAdd) {
@@ -145,6 +137,5 @@ pcb_t* headBlocked(int* semAdd) {
     }
     
     // Se trovato, ritorna la testa della coda di processi
-    // (equivalente a headProcQ su semd->s_procQ)
     return headProcQ(&semd->s_procq);
 }

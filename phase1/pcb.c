@@ -11,7 +11,7 @@ void initPcbs() {
         list_add(&pcbFree_table[x].p_list, &pcbFree_h);     // aggiungo ogni pcb della table[maxproc] alla lista dei pcb liberi
     }
 }
-
+//inseriscelo il PCB p nella lista dei PCB liberi
 void freePcb(pcb_t* p) {
     list_add(&p->p_list, &pcbFree_h);
 }
@@ -61,16 +61,17 @@ void mkEmptyProcQ(struct list_head* head) {
 int emptyProcQ(struct list_head* head) {
     return list_empty(head);
 }
-
+// inserisce il PCB p nella coda dei processi puntata da head, tenendo conto della priorità di p
 void insertProcQ(struct list_head* head, pcb_t* p) {
+    //se la coda è vuota, inserisco direttamente
     if (emptyProcQ(head)) {
         list_add(&p->p_list, head);
         return;
     }
     
-    struct list_head* pos;
+    struct list_head* pos; // iteratore per scorrere la lista
     list_for_each(pos, head) {
-        pcb_t* current = container_of(pos, pcb_t, p_list);
+        pcb_t* current = container_of(pos, pcb_t, p_list); // ottengo il pcb corrente dall'iteratore
         // Se troviamo un processo con priorità minore, inseriamo prima di lui
         if (p->p_prio > current->p_prio) {
             __list_add(&p->p_list, pos->prev, pos);
@@ -82,6 +83,7 @@ void insertProcQ(struct list_head* head, pcb_t* p) {
     list_add_tail(&p->p_list, head);
 }
 
+//ritorna un puntatore al PCB che si trova in testa (max priorità) alla coda dei processi puntata da head 
 pcb_t* headProcQ(struct list_head* head) {
     // coda vuota -> ritorno NULL
     if (emptyProcQ(head)) {
@@ -94,6 +96,7 @@ pcb_t* headProcQ(struct list_head* head) {
     }
 }
 
+//rimuove e ritorna il PCB che si trova in testa (max priorità) alla coda dei processi puntata da head
 pcb_t* removeProcQ(struct list_head* head) {
     // coda vuota -> ritorno NULL
     if (emptyProcQ(head)) {
@@ -160,13 +163,9 @@ pcb_t* removeChild(pcb_t* p) {
 
 }
 
-/*
-make the PCB pointed to by p no longer the
-child of its parent. If the PCB pointed to by p has no parent, return NULL;
-otherwise, return p. Note that the element pointed to by p could be in an
-arbitrary position (i.e. not be the first child of its parent).
-*/
-
+// Rimuove il PCB p dalla lista dei figli del suo genitore
+// Ritorna NULL se p non ha un genitore
+// Altrimenti ritorna p dopo averlo rimosso dalla lista dei figli del genitore
 pcb_t* outChild(pcb_t* p) {
     if (p == NULL || p->p_parent == NULL) {
         return NULL;
