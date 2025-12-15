@@ -8,8 +8,18 @@ static struct list_head semd_h;
 /*Inizializza la lista semdFree inserendo al suo interno tutti gli elementi dell’array statico:
 static semd_t semdTable[MAXPROC]
 static semd_t semdTable[MAXPROC]*/
-void initASL() {
 
+void initASL() {
+    // inizializzo la lista dei semd liberi
+    INIT_LIST_HEAD(&semdFree_h);
+
+    // inizializzo la ASL (vuota all'inizio)
+    INIT_LIST_HEAD(&semd_h);
+
+    // inserisco tutti i semd dell'array nella lista dei liberi
+    for (int i = 0; i < MAXPROC; i++) {
+        list_add(&semd_table[i].s_link, &semdFree_h);
+    }
 }
 
 /*Inserisce il PCB p in fondo alla coda dei processi bloccati sul semaforo con indirizzo semAdd,
