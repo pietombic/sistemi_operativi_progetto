@@ -4,6 +4,7 @@ static struct list_head pcbFree_h;
 static pcb_t pcbFree_table[MAXPROC];
 static int next_pid = 1;
 
+
 void initPcbs() {
     INIT_LIST_HEAD(&pcbFree_h);                             // inizializzo la lista dei pcb liberi  
 
@@ -11,7 +12,8 @@ void initPcbs() {
         list_add(&pcbFree_table[x].p_list, &pcbFree_h);     // aggiungo ogni pcb della table[maxproc] alla lista dei pcb liberi
     }
 }
-//inseriscelo il PCB p nella lista dei PCB liberi
+
+//inserisce il PCB p nella lista dei PCB liberi
 void freePcb(pcb_t* p) {
     list_add(&p->p_list, &pcbFree_h);
 }
@@ -26,6 +28,8 @@ void *memset(void *s, int c, size_t n) {
     return s;
 }
 
+// Restituisce un puntatore ad un PCB libero
+// se non ci sono PCB liberi ritorna NULL
 pcb_t* allocPcb() {
     // se la lista è vuota ritorno NULL
     if(list_empty(&pcbFree_h)) {
@@ -54,10 +58,11 @@ pcb_t* allocPcb() {
     return p;
 }
 
+// inizializza la coda dei processi puntata da head
 void mkEmptyProcQ(struct list_head* head) {
     INIT_LIST_HEAD(head);                       // inizializzo la lista passata come parametro
 }
-
+// Restituisce true se la coda dei processi puntata da head è vuota, false altrimenti
 int emptyProcQ(struct list_head* head) {
     return list_empty(head);
 }
