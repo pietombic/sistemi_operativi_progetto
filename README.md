@@ -1,6 +1,6 @@
 # MultiPandOS Project
 
-Collaborators:
+Contributors:
 - Pietro Tombaccini
 - Luca Belbusti
 - Andrei Pirva Cosmin
