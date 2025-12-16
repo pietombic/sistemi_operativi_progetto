@@ -2,5 +2,6 @@
 /build
 testchat
 .uriscv
-.vscode
-term0.uriscv
+/.vscode
+.uriscv
+/.idea
