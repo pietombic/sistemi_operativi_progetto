@@ -48,15 +48,13 @@ int insertBlocked(int* semAdd, pcb_t* p) {
     }
     // se non l'ho trovato, devo allocarne uno nuovo
     if (semd == NULL) {
-        // se la lista dei semd liberi è vuota, ritorno TRUE (errore)
         if (list_empty(&semdFree_h)) {
             return TRUE;
         }
-        // altrimenti prendo il primo semd dalla lista dei semd liberi
+        // prendo il primo semd dalla lista dei semd liberi
         struct list_head* first = semdFree_h.next;
         list_del(first);
         semd = container_of(first, semd_t, s_link);
-        // inizializzo il semd
         semd->s_key = semAdd;
         mkEmptyProcQ(&semd->s_procq);
         // inserisco il semd nella ASL
@@ -72,7 +70,6 @@ int insertBlocked(int* semAdd, pcb_t* p) {
     }
     // inserisco p nella coda dei processi bloccati sul semaforo
     insertProcQ(&semd->s_procq, p);
-    // imposto in p il campo p->semAdd = semAdd
     p->p_semAdd = semAdd;
     return FALSE;
 }
@@ -119,7 +116,6 @@ pcb_t* outBlocked(pcb_t* p) {
         }
     }
     
-    // Se non trovato, ritorna NULL
     if (semd == NULL) {
         return NULL;
     }
@@ -141,7 +137,6 @@ pcb_t* headBlocked(int* semAdd) {
         }
     }
     
-    // Se non trovato, ritorna NULL
     if (semd == NULL) {
         return NULL;
     }

@@ -31,7 +31,6 @@ void *memset(void *s, int c, size_t n) {
 // Restituisce un puntatore ad un PCB libero
 // se non ci sono PCB liberi ritorna NULL
 pcb_t* allocPcb() {
-    // se la lista è vuota ritorno NULL
     if(list_empty(&pcbFree_h)) {
         return NULL;
     
@@ -39,13 +38,12 @@ pcb_t* allocPcb() {
     // altrimenti prendo un elemento dalla lista, lo rimuovo e lo ritorno
     // prendo il primo elemento della lista
     struct list_head* first = pcbFree_h.next;
-    // rimuovo l'elemento dalla lista
     list_del(first);
     // Come se dicessi "quale struttura pcb_t contiene questo campo p_list?" 
     // -> ci restituisce il puntatore al pcb_t che dobbiamo ritornare
     pcb_t* p = container_of(first, pcb_t, p_list);
     
-    // inizializzo i campi del PCB
+    // inizializzo il PCB
     p->p_parent = NULL;
     INIT_LIST_HEAD(&p->p_child);
     INIT_LIST_HEAD(&p->p_sib);
@@ -60,7 +58,7 @@ pcb_t* allocPcb() {
 
 // inizializza la coda dei processi puntata da head
 void mkEmptyProcQ(struct list_head* head) {
-    INIT_LIST_HEAD(head);                       // inizializzo la lista passata come parametro
+    INIT_LIST_HEAD(head);
 }
 // Restituisce true se la coda dei processi puntata da head è vuota, false altrimenti
 int emptyProcQ(struct list_head* head) {
@@ -74,7 +72,7 @@ void insertProcQ(struct list_head* head, pcb_t* p) {
         return;
     }
     
-    struct list_head* pos; // iteratore per scorrere la lista
+    struct list_head* pos; 
     list_for_each(pos, head) {
         pcb_t* current = container_of(pos, pcb_t, p_list); // ottengo il pcb corrente dall'iteratore
         // Se troviamo un processo con priorità minore, inseriamo prima di lui
@@ -84,7 +82,7 @@ void insertProcQ(struct list_head* head, pcb_t* p) {
         }
     }
     
-    // Se arriviamo qui, nessuno ha priorità minore -> mettiamo in coda
+    // nessuno ha priorità minore -> mettiamo in coda
     list_add_tail(&p->p_list, head);
 }
 
