@@ -6,17 +6,10 @@ To compile the project and generate the necessary build files, run the following
 cmake -B build
 cmake --build build
 ```
-### 2. Dependencies and Configuration
+### 2. Execution
 
 This project requires the uRISCV emulator. Please ensure it is installed on your system. ([uRISCV repository](https://github.com/virtualsquare/uriscv/))
 
-After compilation, the config_machine.json file must be generated within the build folder. Navigate to the build directory and run make:
-
-```bash
-cd build
-make
-```
-### 3. Execution
 Once the config_machine.json is ready, follow these steps to launch the PandOS shell:
 1. **Launch the Emulator**: Execute the uRISCV emulator from your terminal:
 ```bash
