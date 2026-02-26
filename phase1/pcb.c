@@ -100,8 +100,8 @@ pcb_t* headProcQ(struct list_head* head) {
 }
 
 //rimuove e ritorna il PCB che si trova in testa (max priorità) alla coda dei processi puntata da head
+// coda vuota -> ritorno NULL
 pcb_t* removeProcQ(struct list_head* head) {
-    // coda vuota -> ritorno NULL
     if (emptyProcQ(head)) {
         return NULL;
     }
