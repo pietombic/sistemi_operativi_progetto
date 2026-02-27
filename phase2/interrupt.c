@@ -18,13 +18,19 @@ void interruptHandler()
     {
         // Program Local Timer interrupt
         setTIMER(TIMESLICE); // Reset del timer
-        state_t currentState = currentProcess->p_s;
+        state_t* old = (state_t *) INT_OLD_AREA();
+        currentProcess->p_s = *old;
+        insertProcQ(&readyQueue, currentProcess);
         scheduler();
 
     }
     else if (intlineNo == 2)
     {
-        // Interval timer interrupt, gestisci l'interruzione del timer
+        LDIT(PSECOND); // Reset del timer per l'interruzione del timer di sistema
+        // Unblock all PCBs blocked waiting a Pseudo-clock tick.
+        
+        scheduler();
+        
 
     }
     else
