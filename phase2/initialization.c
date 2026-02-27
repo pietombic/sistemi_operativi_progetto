@@ -23,6 +23,9 @@ typedef struct passupvector_t {
 passupvector_t* passupvector;
 
 int main() {
+    if (sizeof(pcb_t) > PAGESIZE) {
+        PANIC();
+    }
     passupvector->tlb_refll_handler = (memaddr)uTLB_RefillHandler;
     passupvector->exception_handler = (memaddr)exceptionHandler;
     passupvector->tlb_refll_stackPtr = (memaddr)KERNELSTACK;
