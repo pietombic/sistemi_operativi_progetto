@@ -2,7 +2,7 @@
 #include "../headers/const.h"
 #include "../phase1/headers/pcb.h"
 #include "../phase1/headers/asl.h"
-#include "initialization.c"
+#include "initial.c"
 
  void scheduler() {
     currentProcess = removeProcQ(&readyQueue); 
