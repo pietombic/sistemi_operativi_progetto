@@ -7,18 +7,24 @@
 
 
 void exceptionHandler() {
-    int cause = getCAUSE();
-    if (CAUSE_IS_INT()){
+    // 1. Ottieni lo stato salvato al momento dell'eccezione
+    state_t *exceptionState = GET_EXCEPTION_STATE_PTR(0); 
+
+    // 2. Estrai il codice dell'eccezione usando la maschera
+    unsigned int cause = exceptionState->cause; [cite: 128]
+    unsigned int excCode = (cause & GETEXECCODE) >> CAUSESHIFT;
+
+    if (CAUSE_IS_INT(cause)){
         interruptHandler();
     }else{
         if(cause >= 24 && cause <= 28){
-            // TLB exception
+            tlbExceptionHandler();
         }
         else if(cause == 8 || cause == 11){
             systemCallHandler();
         }
         else if(cause >= 0 && cause <= 7 || cause == 10 || cause >= 12 && cause <= 23){
-            // Program trap
+            programTrapHandler();
         }
         else{
             // Unrecognized exception code
@@ -185,4 +191,111 @@ void signalSemaphore(state_t *state) {
     // L'operazione V non blocca mai il chiamante, quindi incrementa il PC e restituisce il controllo al processo chiamante
     state->pc_epc += 4;
     LDST(state);
+}
+
+void doIO(state_t *state) {
+    // 1. Recupero parametri dai registri
+    // a1: indirizzo del campo comando del dispositivo
+    // a2: valore del comando da scrivere
+    int *commandAddr = (int *)state->reg_a1;
+    int commandValue = state->reg_a2;
+
+    // 2. Calcolo dell'indice del semaforo di dispositivo
+    // Il Nucleus mantiene un array di semafori per i dispositivi (Device Semaphores)
+    // Devi mappare l'indirizzo del registro al semaforo corrispondente
+    int *semAdd = getDeviceSemaphore(commandAddr); 
+
+    // Scrittura del comando nel registro del dispositivo
+    *commandAddr = commandValue; 
+
+    //incremento il PC di 4 per puntare all'istruzione successiva al risveglio
+    state->pc_epc += 4; 
+
+    //copio lo stato attuale nel PCB del processo corrente
+    currentProcess->p_s = *state; 
+
+    updateCPUTime(currentProcess); 
+
+    //poiché i semafori dei dispositivi sono inizializzati a 0, questa operazione bloccherà sempre il processo.
+    if (insertBlocked(semAdd, currentProcess)) {
+        PANIC(); // Errore critico se non ci sono descrittori di semaforo liberi
+    }
+    //il processo è ora in stato "waiting" per I/O
+    softBlockCount++; 
+    // Il processo corrente non è più "running"
+    currentProcess = NULL; 
+    scheduler(); 
+}
+
+void getCpuTime(state_t *state) {
+    cpu_t current_tod;
+
+    //Leggo il valore attuale del clock TOD 
+    STCK(current_tod);
+    //Calcolo il tempo totale: tempo_accumulato + (ora_attuale - ora_inizio_esecuzione)
+    cpu_t total_time = currentProcess->p_time + (current_tod - start_time_current_quantum);
+
+    state->reg_a0 = total_time;
+    state->pc_epc += 4;
+    LDST(state);
+}
+
+//DA CAPIRE !!! 
+void waitForClock(state_t *state) {
+    //prendo il semaforo dello pseudo-clock
+    int *semAdd = &deviceSemaphores[SEMDEVLEN - 1];
+
+    state->pc_epc += 4;
+    currentProcess->p_s = *state;
+    updateCPUTime(currentProcess);
+    //se un processo tenta di bloccarsi su un semaforo nuovo ma la lista semdFree_h è vuota,
+    //insertBlocked restituisce TRUE  per segnalare che non è stato possibile completare l'operazione.
+    if (insertBlocked(semAdd, currentProcess)) {
+        PANIC(); // Errore se non ci sono descrittori di semaforo liberi [cite: 112]
+    }
+    softBlockCount++;
+    currentProcess = NULL;
+    scheduler();
+}
+
+void getSupportData(state_t *state) {
+    state->reg_a0 = (unsigned int)currentProcess->p_supportStruct;
+    state->pc_epc += 4;
+    LDST(state);
+}
+
+void getProcessID(state_t *state) {
+    int requestedParent = state->reg_a1;
+    
+    //devo restituire il PID del processo chiamante
+    if (requestedParent == 0) {
+        state->reg_a0 = currentProcess->p_pid;
+    } else {
+        //restituisco il pid del genitore se esiste
+        if (currentProcess->p_parent != NULL) {
+            state->reg_a0 = currentProcess->p_parent->p_pid; 
+        } else {
+            state->reg_a0 = 0; 
+        }
+    }
+    state->pc_epc += 4;
+    LDST(state); 
+}
+
+void yield(state_t *state) {
+    state->pc_epc += 4; 
+    currentProcess->p_s = *state;
+    updateCPUTime(currentProcess); 
+    //inserisco il processo corrente nella Ready Queue (da ready diventa running)
+    insertProcQ(&readyQueue, currentProcess);
+    currentProcess = NULL;
+    scheduler(); 
+}
+
+void programTrapHandler() {
+
+}
+
+void tlbExceptionHandler() {
+
 }
