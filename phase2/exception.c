@@ -296,6 +296,24 @@ void programTrapHandler() {
 
 }
 
-void tlbExceptionHandler() {
+void tlbExceptionHandler() { 
+    state_t *oldState = GET_EXCEPTION_STATE_PTR(0);
 
+    /* DIE: se non c'è processo corrente o non ha supportStruct */
+    if (currentProcess == NULL || currentProcess->p_supportStruct == NULL) {
+        /* terminateProcess legge il PID=0 del processo corrente */
+        oldState->reg_a0 = 0;
+        terminateProcess(oldState);
+
+        /* Se terminateProcess ritorna comunque, schedula */
+        scheduler();
+        return;
+    }
+
+    /* PASS UP: salva lo stato dell'eccezione e salta al support handler */
+    support_t *sup = currentProcess->p_supportStruct;
+    sup->sup_exceptState[PGFAULTEXCEPT] = *oldState;
+    LDST(&sup->sup_exceptContext[PGFAULTEXCEPT]);
+
+    /* Non si ritorna mai da LDST */
 }
