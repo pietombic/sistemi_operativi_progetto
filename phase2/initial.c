@@ -1,10 +1,12 @@
-#include "headers/types.h"
-#include "phase1/asl.c"
-#include "phase1/pcb.c"
+#include "../headers/types.h"
+#include "../phase1/headers/asl.h"
+#include "../phase1/headers/pcb.h"
 #include "headers/initial.h"
 #include "headers/scheduler.h"
 #include "headers/excpetion.h"
 #include <uriscv/liburiscv.h>
+
+extern void test();
 
 void updateCPUTime(pcb_t *p) {
     cpu_t current_tod;
@@ -32,14 +34,6 @@ pcb_t* findProcessByPID(int pid) {
     return findBlockedProcessByPID(pid);
 }
 
-
-typedef struct passupvector_t {
-    memaddr tlb_refll_handler;
-    memaddr exception_handler;
-    memaddr tlb_refll_stackPtr;
-    memaddr exception_stackPtr;
-} passupvector_t;
-
 passupvector_t* passupvector;
 
 void uTLB_RefillHandler()
@@ -56,9 +50,9 @@ int main() {
     if (sizeof(pcb_t) > PAGESIZE) {
         PANIC();
     }
-    passupvector->tlb_refll_handler = (memaddr)uTLB_RefillHandler;
+    passupvector->tlb_refill_handler = (memaddr)uTLB_RefillHandler;
     passupvector->exception_handler = (memaddr)exceptionHandler;
-    passupvector->tlb_refll_stackPtr = (memaddr)KERNELSTACK;
+    passupvector->tlb_refill_stackPtr = (memaddr)KERNELSTACK;
     passupvector->exception_stackPtr = (memaddr)KERNELSTACK;
 
     initPcbs();
@@ -107,5 +101,3 @@ int main() {
 
     scheduler();
 }
-
-extern void test();

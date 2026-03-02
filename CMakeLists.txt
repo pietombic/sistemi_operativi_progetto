@@ -14,6 +14,11 @@ add_compile_options(-ffreestanding -static -nostartfiles -nostdlib -I${URISCV_IN
 
 add_executable(MultiPandOS
     ./klog.c phase1/pcb.c phase1/asl.c phase1/p1test.c
+	phase2/p2test.c
+	phase2/exception.c
+	phase2/interrupt.c
+	phase2/initial.c
+	phase2/scheduler.c
     ${URISCV_SRC}/crtso.S ${URISCV_SRC}/liburiscv.S)
 
 add_custom_target(

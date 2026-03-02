@@ -1,5 +1,5 @@
 #include "initial.h"
-#include "../headers/types.h"
-#include "../headers/const.h"
+#include "../../headers/types.h"
+#include "../../headers/const.h"
 
 void scheduler();
