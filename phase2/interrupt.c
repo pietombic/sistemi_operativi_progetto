@@ -3,7 +3,11 @@
 #include "headers/listx.h"
 #include "phase1/headers/pcb.h"
 #include "phase1/headers/asl.h"
-#include "initial.c"
+#include "headers/initial.h"
+#include "headers/scheduler.h"
+#include "headers/excpetion.h"
+#include "headers/interrupt.h"
+#include <uriscv/liburiscv.h>
 
 
 void interruptHandler()
@@ -44,6 +48,7 @@ void interruptHandler()
         // Interruzioni di Device, utilizziamo la bitmap per identificare quale dispositivo ha generato l'interruzione
     }
 }
+
 int getDeviceNumber(unsigned int word) {
     if(word & DEV0ON)
         return 0;
@@ -65,6 +70,7 @@ int getDeviceNumber(unsigned int word) {
         return -1; // Nessun dispositivo attivo
 
 }
+
 int highestPriorityPendingLine(){
     int cause = getCAUSE();
     for (int line = 1; line <= 7; line++) {

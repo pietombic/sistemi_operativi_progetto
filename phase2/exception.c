@@ -2,8 +2,11 @@
 #include "../headers/const.h"
 #include "../phase1/headers/pcb.h"
 #include "../phase1/headers/asl.h"
-#include "initial.c"
-
+#include "headers/initial.h"
+#include "headers/scheduler.h"
+#include "headers/excpetion.h"
+#include "headers/interrupt.h"
+#include <uriscv/liburiscv.h>
 
 
 void exceptionHandler() {
@@ -11,26 +14,20 @@ void exceptionHandler() {
     state_t *exceptionState = GET_EXCEPTION_STATE_PTR(0); 
 
     // 2. Estrai il codice dell'eccezione usando la maschera
-    unsigned int cause = exceptionState->cause; [cite: 128]
+    unsigned int cause = exceptionState->cause; 
     unsigned int excCode = (cause & GETEXECCODE) >> CAUSESHIFT;
 
     if (CAUSE_IS_INT(cause)){
         interruptHandler();
     }else{
-        if(cause >= 24 && cause <= 28){
-            tlbExceptionHandler();
-        }
-        else if(cause == 8 || cause == 11){
+        if (excCode >= 24 && excCode <= 28) {
+            passUpOrDie(PGFAULTEXCEPT, exceptionState);
+        } else if (excCode == SYSEXCEPTION || excCode == 11 || excCode == 8) {
             systemCallHandler();
+        } else {
+            // Gestisce tutti i codici 0-7, 9, 10, 12-23 come Program Trap
+            passUpOrDie(GENERALEXCEPT, exceptionState);
         }
-        else if(cause >= 0 && cause <= 7 || cause == 10 || cause >= 12 && cause <= 23){
-            programTrapHandler();
-        }
-        else{
-            // Unrecognized exception code
-            PANIC();
-        }
-
     }
 }
 
@@ -76,7 +73,7 @@ void systemCallHandler() {
             waitForClock(state);
             break;
         case GETSUPPORTPTR:   // -8
-            getSupportPtr(state);
+            getSupportData(state);
             break;
         case GETPROCESSID:     // -9
             getProcessID(state);
@@ -115,8 +112,13 @@ void createProcess(state_t *state) {
 }
 
 void terminateProcess(state_t *state) {
-    int pid = state->reg_a0; //leggo il PID del processo da terminare da a0
+    int pid = state->reg_a1; //leggo il PID del processo da terminare da a0
     pcb_t *target;
+    // Prima di terminare, se il bersaglio siamo noi, aggiorniamo il nostro tempo finale
+    if (pid == 0 || (currentProcess != NULL && currentProcess->p_pid == pid)) {
+        updateCPUTime(currentProcess);
+    }
+
     if (pid == 0) {
         target = currentProcess; //se il PID è 0, termina il processo corrente
     } else {
@@ -132,6 +134,7 @@ void terminateProcess(state_t *state) {
         LDST(state); //carico lo stato aggiornato
     }
 }
+
 void recursiveTerminate(pcb_t *p){
     while (!emptyChild(p)) {
         recursiveTerminate(removeChild(p));
@@ -153,7 +156,7 @@ void recursiveTerminate(pcb_t *p){
 }
 
 void waitSemaphore(state_t *state) {
-    int semIndex = (int *)state->reg_a0; //leggo l'indice del semaforo da a0
+    int *semAdd = (int *)state->reg_a1; //leggo l'indice del semaforo da a0
     (*semAdd)--;
 
     if ((*semAdd) < 0) {        
@@ -227,9 +230,8 @@ void doIO(state_t *state) {
     scheduler(); 
 }
 
-void getCpuTime(state_t *state) {
+void getCPUTime(state_t *state) {
     cpu_t current_tod;
-
     //Leggo il valore attuale del clock TOD 
     STCK(current_tod);
     //Calcolo il tempo totale: tempo_accumulato + (ora_attuale - ora_inizio_esecuzione)
@@ -292,28 +294,18 @@ void yield(state_t *state) {
     scheduler(); 
 }
 
-void programTrapHandler() {
-
-}
-
-void tlbExceptionHandler() { 
-    state_t *oldState = GET_EXCEPTION_STATE_PTR(0);
-
-    /* DIE: se non c'è processo corrente o non ha supportStruct */
-    if (currentProcess == NULL || currentProcess->p_supportStruct == NULL) {
-        /* terminateProcess legge il PID=0 del processo corrente */
-        oldState->reg_a0 = 0;
-        terminateProcess(oldState);
-
-        /* Se terminateProcess ritorna comunque, schedula */
-        scheduler();
-        return;
+void passUpOrDie(int exceptionType, state_t *exceptionState) {
+    // Se il processo non ha una struttura di supporto
+    if (currentProcess->p_supportStruct == NULL) {
+        // Chiamiamo la logica di terminazione 
+        terminateProcess(exceptionState); 
+    } 
+    else {
+        updateCPUTime(currentProcess);
+        currentProcess->p_supportStruct->sup_exceptState[exceptionType] = *exceptionState;
+        //Recupera il contesto per il salto al Support Level 
+        context_t newContext = currentProcess->p_supportStruct->sup_exceptContext[exceptionType];
+        LDCXT(newContext.stackPtr, newContext.status, newContext.pc);
     }
-
-    /* PASS UP: salva lo stato dell'eccezione e salta al support handler */
-    support_t *sup = currentProcess->p_supportStruct;
-    sup->sup_exceptState[PGFAULTEXCEPT] = *oldState;
-    LDST(&sup->sup_exceptContext[PGFAULTEXCEPT]);
-
-    /* Non si ritorna mai da LDST */
 }
+

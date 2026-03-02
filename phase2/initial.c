@@ -1,16 +1,36 @@
 #include "headers/types.h"
-
-#include "exception.c"
 #include "phase1/asl.c"
 #include "phase1/pcb.c"
+#include "headers/initial.h"
+#include "headers/scheduler.h"
+#include "headers/excpetion.h"
+#include <uriscv/liburiscv.h>
 
-int processCount;
-int softBlockCount;
-struct list_head readyQueue;
-pcb_t *currentProcess;
+void updateCPUTime(pcb_t *p) {
+    cpu_t current_tod;
+    STCK(current_tod); // Legge il valore attuale del TOD clock [cite: 418, 419]
 
-/* Device semaphore */
-int deviceSemaphores[SEMDEVLEN];
+    // Aggiunge la differenza al tempo accumulato nel PCB [cite: 414, 417]
+    p->p_time += (current_tod - start_time_current_quantum);
+
+    // Aggiorna il tempo di inizio per l'eventuale prossimo intervallo
+    start_time_current_quantum = current_tod;
+}
+
+pcb_t* findProcessByPID(int pid) {
+    // 1. Controlla il processo corrente
+    if (currentProcess != NULL && currentProcess->p_pid == pid) {
+        return currentProcess;
+    }
+    // 2. Cerca nella Ready Queue
+    struct list_head *pos;
+    list_for_each(pos, &readyQueue) {
+        pcb_t *p = container_of(pos, pcb_t, p_list);
+        if (p->p_pid == pid) return p;
+    }
+    // 3. Cerca nei processi bloccati (usando l'helper sopra)
+    return findBlockedProcessByPID(pid);
+}
 
 
 typedef struct passupvector_t {
@@ -86,9 +106,6 @@ int main() {
     processCount++;
 
     scheduler();
-
-    
-
 }
 
 extern void test();
