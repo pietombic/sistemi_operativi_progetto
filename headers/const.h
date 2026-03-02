@@ -147,6 +147,7 @@
 #define DEV7ON 0x00000080
 
 
+#define ACK          1
 #define OKCHARTRANS  5
 #define TRANSMITCHAR 2
 #define RECEIVECHAR 	2		// aggiunta comando di ricezione del carattere

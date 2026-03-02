@@ -31,7 +31,16 @@ void interruptHandler()
     else if (intlineNo == 2)
     {
         LDIT(PSECOND); // Reset del timer per l'interruzione del timer di sistema
-        // Unblock all PCBs blocked waiting a Pseudo-clock tick.
+        // sblocca tutti i PCB bloccati che attendono un tick dello Pseudo-clock.
+        int* semAdd = &deviceSemaphores[SEMDEVLEN - 1];
+        pcb_t* unblocked;
+        while ((unblocked = removeBlocked(semAdd)) != NULL) {
+            insertProcQ(&readyQueue, unblocked);
+        }
+        // ritorna il controllo al processo corrente: fa LDST sullo stato salvato al momento dell'interruzione
+        state_t* old = (state_t *) INT_OLD_AREA();
+        currentProcess->p_s = *old;
+        LDST(&(currentProcess->p_s));
         
         scheduler();
         
@@ -39,14 +48,53 @@ void interruptHandler()
     }
     else
     {
-        int j = intlineNo - 3; // Calcola l'indice del dispositivo (linee 3-7)
+        // Device interrupt
+        int j = intlineNo - 3; // calcola l'indice del dispositivo
         unsigned int word = getDeviceBitmap(j);
-        int deviceNo = getDeviceNumber(word); 
+        int deviceNo = getDeviceNumber(word);
 
-        int devAddrBase = 0x10000054 + ((intlineNo - 3) * 0x80) + (deviceNo * 0x10);
+        // calcola l'indirizzo del registro del dispositivo
+        unsigned int devAddrBase = 0x10000054 + ((intlineNo - 3) * 0x80) + (deviceNo * 0x10);
         
-        // Interruzioni di Device, utilizziamo la bitmap per identificare quale dispositivo ha generato l'interruzione
+        // salva lo status code del subdevice del dispositivo
+        unsigned int* devRegPtr = (unsigned int*) devAddrBase;
+        int statusCode = *devRegPtr;
+        
+        // ACK dell'interruzione scrivendo 1 nel registro del comando del dispositivo
+        unsigned int* cmdRegPtr = (unsigned int*) (devAddrBase + 0x04);
+        *cmdRegPtr = ACK;
+        
+        // operazione V sul semaforo del dispositivo
+        int* semaphoreAddr = &deviceSemaphores[(intlineNo - 3) * 8 + deviceNo];
+        pcb_t* unblocked = removeBlocked(semaphoreAddr);
+        
+        // controlla se ci sono dei PCB bloccati
+        if (unblocked != NULL) {
+            // inserisci il codice di stato nel registro a0 del PCB sbloccato
+            unblocked->p_s.reg_a0 = statusCode;
+            
+            // inserisci il PCB sbloccato nella Ready Queue
+            insertProcQ(&readyQueue, unblocked);
+        }
+        
+        // ritorna il controllo al processo corrente o chiama lo scheduler se il processo corrente è NULL
+        if (currentProcess != NULL) {
+            // salva lo stato del processo corrente e inseriscilo nella Ready Queue
+            state_t* old = (state_t *) INT_OLD_AREA();
+            currentProcess->p_s = *old;
+            insertProcQ(&readyQueue, currentProcess);
+        }
+        
+        // chiama lo scheduler per eseguire il prossimo processo
+        scheduler();
     }
+}
+
+unsigned int getDeviceBitmap(int deviceLine) {
+    // Bitmap dei dispositivi per la word
+    unsigned int irrAddr = 0x10000040 + (deviceLine * 0x04);
+    unsigned int* irrRegPtr = (unsigned int*) irrAddr;
+    return *irrRegPtr;
 }
 
 int getDeviceNumber(unsigned int word) {
