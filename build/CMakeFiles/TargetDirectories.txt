@@ -1,0 +1,4 @@
+/home/belbu/Desktop/sistemi_operativi_progetto/build/CMakeFiles/MultiPandOS.dir
+/home/belbu/Desktop/sistemi_operativi_progetto/build/CMakeFiles/MultiPandOSuRISCV.dir
+/home/belbu/Desktop/sistemi_operativi_progetto/build/CMakeFiles/edit_cache.dir
+/home/belbu/Desktop/sistemi_operativi_progetto/build/CMakeFiles/rebuild_cache.dir
