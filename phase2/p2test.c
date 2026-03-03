@@ -118,9 +118,13 @@ void print(char *msg) {
     devregtr  status;
 
     SYSCALL(PASSEREN, (int)&sem_term_mut, 0, 0); /* P(sem_term_mut) */
+    klog_print("sem_term_mut = ");
+    klog_print_dec(sem_term_mut);
+    klog_print("\n");
     while (*s != EOS) {
         devregtr value = PRINTCHR | (((devregtr)*s) << 8);
         status         = SYSCALL(DOIO, (int)command, (int)value, 0);
+        // non lo raggiunge
         klog_print("status & TERMSTATMASK:");
         klog_print_hex(status & TERMSTATMASK);
         klog_print("\n");
