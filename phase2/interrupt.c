@@ -9,6 +9,9 @@
 #include "headers/interrupt.h"
 #include <uriscv/liburiscv.h>
 #include <uriscv/cpu.h>
+#include <uriscv/arch.h>
+#include "headers/klog.h"
+
 
 
 void interruptHandler()
@@ -20,12 +23,13 @@ void interruptHandler()
     }
     else if (intlineNo == 1)
     {
-        int cpu = getPRID();
         // Program Local Timer interrupt
         setTIMER(TIMESLICE); // Reset del timer
+        int cpu = getPRID(); // Ottieni il numero della CPU (core) che ha generato l'interruzione
         state_t* old = GET_EXCEPTION_STATE_PTR(cpu);
         currentProcess->p_s = *old;
         insertProcQ(&readyQueue, currentProcess);
+        currentProcess = NULL;
         scheduler();
 
     }
@@ -37,14 +41,17 @@ void interruptHandler()
         pcb_t* unblocked;
         while ((unblocked = removeBlocked(semAdd)) != NULL) {
             insertProcQ(&readyQueue, unblocked);
+            softBlockCount--;
+
         }
         // ritorna il controllo al processo corrente: fa LDST sullo stato salvato al momento dell'interruzione
-        int cpu = getPRID();
-        state_t* old = GET_EXCEPTION_STATE_PTR(cpu);
-        currentProcess->p_s = *old;
-        LDST(&(currentProcess->p_s));
-        
-        scheduler();
+        state_t* old = GET_EXCEPTION_STATE_PTR(getPRID());
+
+       if(currentProcess != NULL){
+            LDST(old);
+        }else{
+            scheduler();
+        }
     }
     else
     {
@@ -59,6 +66,25 @@ void interruptHandler()
         // salva lo status code del subdevice del dispositivo
         unsigned int* devRegPtr = (unsigned int*) devAddrBase;
         int statusCode = *devRegPtr;
+
+        if (intlineNo == 7) {
+            /* terminal line has two subdevices: 0=receive, 1=transmit.
+             * statusCode reflects the type of event (TRANSMITCHAR, OKCHARTRANS,
+             * RECEIVECHAR).  Log the interrupt and adjust the value for
+             * receive events so that the unblocked process sees the character
+             * itself in a0. */
+            klog_print("[INT] terminal interrupt\n");
+            klog_print("[INT] subdevice="); klog_print_dec(deviceNo);
+            klog_print(" status="); klog_print_dec(statusCode); klog_print("\n");
+            if (deviceNo == 0) {
+                /* receive subdevice: statusCode low byte contains flag,
+                 * high byte the character. */
+                if ((statusCode & 0xFF) == RECEIVECHAR) {
+                    statusCode = (statusCode >> 8) & 0xFF;
+                }
+            }
+            /* transmit subdevice (deviceNo==1) requires no extra adjustment */
+        }
         
         // ACK dell'interruzione scrivendo 1 nel registro del comando del dispositivo
         unsigned int* cmdRegPtr = (unsigned int*) (devAddrBase + 0x04);
@@ -75,19 +101,18 @@ void interruptHandler()
             
             // inserisci il PCB sbloccato nella Ready Queue
             insertProcQ(&readyQueue, unblocked);
+            softBlockCount--;
         }
         
         // ritorna il controllo al processo corrente o chiama lo scheduler se il processo corrente è NULL
-        if (currentProcess != NULL) {
-            // salva lo stato del processo corrente e inseriscilo nella Ready Queue
-            int cpu = getPRID();
-            state_t* old = GET_EXCEPTION_STATE_PTR(cpu);
-            currentProcess->p_s = *old;
-            insertProcQ(&readyQueue, currentProcess);
+        // ritorna il controllo al processo corrente o chiama lo scheduler se il processo corrente è NULL
+        state_t* old = GET_EXCEPTION_STATE_PTR(getPRID());
+
+       if(currentProcess != NULL){
+            LDST(old);
+        }else{
+            scheduler();
         }
-        
-        // chiama lo scheduler per eseguire il prossimo processo
-        scheduler();
     }
 }
 

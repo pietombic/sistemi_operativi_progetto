@@ -230,6 +230,7 @@
 
 /* Inizio indirizzo di device registers */
 #define START_DEVREG		0x10000054
+#define TERM0ADDR 0x10000254
 
 #define STATE_T_SIZE_IN_BYTES 148 
 #define GET_EXCEPTION_STATE_PTR(i) ((state_t*) (BIOSDATAPAGE + i * STATE_T_SIZE_IN_BYTES))

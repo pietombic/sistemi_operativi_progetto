@@ -8,10 +8,12 @@
 #include <uriscv/liburiscv.h>
 
 void scheduler() {
+    
     // 1. Tenta di rimuovere il prossimo PCB dalla Ready Queue
     currentProcess = removeProcQ(&readyQueue); 
 
     if (currentProcess != NULL) {
+ 
         //Carica 5 millisecondi sul PLT per il time slice (quanto di tempo)
         setTIMER(TIMESLICE); 
 
@@ -41,8 +43,6 @@ void scheduler() {
             WAIT(); 
         } 
         else if (processCount > 0 && softBlockCount == 0) {
-            // Caso 3: Deadlock (processi esistenti ma nessuno può essere sbloccato)
-            // klog_print("scheduler");
             PANIC(); 
         }
     }

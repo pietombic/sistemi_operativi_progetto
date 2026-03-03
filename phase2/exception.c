@@ -20,32 +20,51 @@ void *memcpy(void *dest, const void *src, size_t n) {
 
 void exceptionHandler() {
     // 1. Ottieni lo stato salvato al momento dell'eccezione
-    state_t *exceptionState = GET_EXCEPTION_STATE_PTR(0); 
+    int cpu = getPRID(); // Ottieni il numero della CPU (core) che ha generato l'eccezione
+    state_t *exceptionState = GET_EXCEPTION_STATE_PTR(cpu); 
+    klog_print("exception handler called\n"); 
 
     // 2. Estrai il codice dell'eccezione usando la maschera
-    unsigned int cause = exceptionState->cause; 
-    unsigned int excCode = (cause & GETEXECCODE) >> CAUSESHIFT;
+    unsigned int cause = getCAUSE(); 
+    unsigned int excCode = cause & CAUSE_EXCCODE_MASK;
+    klog_print("excCode = "); 
+    klog_print_dec(excCode);
+    klog_print("\n");
 
     if (CAUSE_IS_INT(cause)){
+        // se è un interrupt
         interruptHandler();
     }else{
+        // altrimenti gestiscila come eccezione
         if (excCode >= 24 && excCode <= 28) {
+            klog_print("first exc\n");
             passUpOrDie(PGFAULTEXCEPT, exceptionState);
         } else if (excCode == SYSEXCEPTION || excCode == 11 || excCode == 8) {
+            klog_print("second exc\n");
             systemCallHandler();
         } else {
             // Gestisce tutti i codici 0-7, 9, 10, 12-23 come Program Trap
+            klog_print("third exc\n");
             passUpOrDie(GENERALEXCEPT, exceptionState);
         }
     }
 }
 
 void systemCallHandler() {
+    // FIXIT: controllare perché non passa il giusto service code
+    klog_print("system call handler\n");
     //Ottengo lo stato salvato 
-    state_t *state = GET_EXCEPTION_STATE_PTR(0); 
+    // FIXME: rimuovere il commento in int cpu
+    int cpu = getPRID();
+    state_t *state = GET_EXCEPTION_STATE_PTR(cpu);
+     
 
     //Leggo il codice del servizio da a0
     int service_code = state->reg_a0;
+
+    klog_print("service code = ");
+    klog_print_dec(service_code);
+    klog_print("\n");
 
     //Controllo Kernel-mode per SYSCALL negative
     if (service_code < 0) {
@@ -73,6 +92,7 @@ void systemCallHandler() {
             signalSemaphore(state);
             break;
         case DOIO:           // -5
+            klog_print("doIO syscall\n");
             doIO(state);
             break;
         case GETTIME:     // -6
@@ -117,6 +137,7 @@ void createProcess(state_t *state) {
         state->reg_a0 = newPcb->p_pid; //ritorno il PID del nuovo processo in a0
     }
     state->pc_epc += 4; //incremento il PC per evitare di rieseguire la system call
+
     LDST(state); //carico lo stato aggiornato
 }
 
@@ -177,7 +198,7 @@ void waitSemaphore(state_t *state) {
         updateCPUTime(currentProcess);
         //Inserisce il PCB nell'ASL e lo blocca sul semaforo, se insertBlocked ritorna TRUE, i semafori sono finiti e si va in PANIC
         if (insertBlocked(semAdd, currentProcess)) {
-            // klog_print("wait semaphore \n");
+            klog_print("wait semaphore \n");
             PANIC(); 
         }
         // 5. Chiama lo Scheduler per far partire un altro processo
@@ -190,6 +211,7 @@ void waitSemaphore(state_t *state) {
     }
 }
 
+// FIXME: non aumenta il valore della variabile del semaforo, ma solo quella del processo chiamante, da capire se è un problema o no
 void signalSemaphore(state_t *state) {
     int *semIndex = (int *)state->reg_a1;
     (*semIndex)++;
@@ -210,8 +232,10 @@ void doIO(state_t *state) {
     // 1. Recupero parametri dai registri
     // a1: indirizzo del campo comando del dispositivo
     // a2: valore del comando da scrivere
+    klog_print("do IO \n");
     int *commandAddr = (int *)state->reg_a1;
     int commandValue = state->reg_a2;
+
 
     // 2. Calcolo dell'indice del semaforo di dispositivo
     // Il Nucleus mantiene un array di semafori per i dispositivi (Device Semaphores)
@@ -228,16 +252,19 @@ void doIO(state_t *state) {
     currentProcess->p_s = *state; 
 
     updateCPUTime(currentProcess); 
+    klog_print("do IO: updated CPU time\n");
 
     //poiché i semafori dei dispositivi sono inizializzati a 0, questa operazione bloccherà sempre il processo.
     if (insertBlocked(semAdd, currentProcess)) {
-        // klog_print("do IO \n");
+        klog_print("panic do IO \n");
         PANIC(); // Errore critico se non ci sono descrittori di semaforo liberi
     }
     //il processo è ora in stato "waiting" per I/O
     softBlockCount++; 
+    klog_print("do IO: process blocked, softBlockCount incremented\n");
     // Il processo corrente non è più "running"
     currentProcess = NULL; 
+    klog_print("do IO: current process set to NULL\n");
     scheduler(); 
 }
 
@@ -264,7 +291,7 @@ void waitForClock(state_t *state) {
     //se un processo tenta di bloccarsi su un semaforo nuovo ma la lista semdFree_h è vuota,
     //insertBlocked restituisce TRUE  per segnalare che non è stato possibile completare l'operazione.
     if (insertBlocked(semAdd, currentProcess)) {
-        // klog_print("wait for clock: semdFree_h is empty\n");
+        klog_print("wait for clock: semdFree_h is empty\n");
         PANIC(); // Errore se non ci sono descrittori di semaforo liberi [cite: 112]
     }
     softBlockCount++;
@@ -293,6 +320,7 @@ void getProcessID(state_t *state) {
         }
     }
     state->pc_epc += 4;
+
     LDST(state); 
 }
 
@@ -324,7 +352,8 @@ void passUpOrDie(int exceptionType, state_t *exceptionState) {
 void programTrapHandler() {
     // Handle program trap exception
     // Get the current exception state
-    state_t *exceptionState = GET_EXCEPTION_STATE_PTR(0);
+    int cpu = getPRID(); // Ottieni il numero della CPU (core) che ha generato l'eccezione
+    state_t *exceptionState = GET_EXCEPTION_STATE_PTR(cpu);
     
     // Pass up to support level or terminate
     passUpOrDie(GENERALEXCEPT, exceptionState);

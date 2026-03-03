@@ -18,6 +18,7 @@
 #include "../headers/const.h"
 #include "../headers/types.h"
 #include <uriscv/liburiscv.h>
+#include "headers/klog.h"
 
 typedef unsigned int devregtr;
 
@@ -120,7 +121,12 @@ void print(char *msg) {
     while (*s != EOS) {
         devregtr value = PRINTCHR | (((devregtr)*s) << 8);
         status         = SYSCALL(DOIO, (int)command, (int)value, 0);
+        klog_print("status & TERMSTATMASK:");
+        klog_print_hex(status & TERMSTATMASK);
+        klog_print("\n");
+
         if ((status & TERMSTATMASK) != RECVD) {
+            klog_print("Error: terminal did not receive character\n");
             PANIC();
         }
         s++;
@@ -145,24 +151,35 @@ void print(char *msg) {
 /*                                                                   */
 void test() {
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0); /* V(sem_testsem)   */
+    klog_print_dec(sem_testsem);
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0);
+    klog_print_dec(sem_testsem);
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0);
+    klog_print_dec(sem_testsem);
 
     if (sem_testsem != 3) {
+        klog_print("testsem != 3\n");
         print("Error: wrong semaphore value\n");
         PANIC();
     }
+    klog_print("dopo prima passata \n");
 
     SYSCALL(PASSEREN, (int)&sem_testsem, 0, 0);
+    klog_print_dec(sem_testsem);
     SYSCALL(PASSEREN, (int)&sem_testsem, 0, 0);
+    klog_print_dec(sem_testsem);
     SYSCALL(PASSEREN, (int)&sem_testsem, 0, 0);
-
+    klog_print_dec(sem_testsem);
+    klog_print("dopo seconda passata \n");
+    
     if (sem_testsem != 0) {
         print("Error: wrong semaphore value\n");
         PANIC();
     }
 
     print("p1 v(sem_testsem)\n");
+    klog_print("post print");
+
 
     /* set up states of the other processes */
 

@@ -47,21 +47,19 @@ passupvector_t* passupvector;
 
 
 void initKernel() {
-    klog_print("init kernel");
     if (sizeof(pcb_t) > PAGESIZE) {
-        klog_print("panic init kernel: pcb_t size exceeds page size\n");
         PANIC();
     }
 
-    passupvector = (passupvector_t *) BIOSDATAPAGE;
+    passupvector = (passupvector_t *) (BIOSDATAPAGE + 0x900);
     passupvector->tlb_refill_handler = (memaddr)uTLB_RefillHandler;
     passupvector->exception_handler = (memaddr)exceptionHandler;
     passupvector->tlb_refill_stackPtr = (memaddr)KERNELSTACK;
     passupvector->exception_stackPtr = (memaddr)KERNELSTACK;
-    klog_print("passupvector initialized");
+
     initPcbs();
     initASL();
-    klog_print("ASL initialized");
+
 
     processCount = 0;
     softBlockCount = 0;
@@ -73,6 +71,7 @@ void initKernel() {
     for (i = 0; i < SEMDEVLEN; i++) {
         deviceSemaphores[i] = 0;
     }
+
 
     // Inizializza il timer
     LDIT(PSECOND);
