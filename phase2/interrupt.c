@@ -5,14 +5,14 @@
 #include "../phase1/headers/asl.h"
 #include "headers/initial.h"
 #include "headers/scheduler.h"
-#include "headers/excpetion.h"
+#include "headers/exception.h"
 #include "headers/interrupt.h"
 #include <uriscv/liburiscv.h>
+#include <uriscv/cpu.h>
 
 
 void interruptHandler()
 {
-    int cause = getCAUSE();
     int intlineNo = highestPriorityPendingLine();
     if (intlineNo == -1)
     {
@@ -20,9 +20,10 @@ void interruptHandler()
     }
     else if (intlineNo == 1)
     {
+        int cpu = getPRID();
         // Program Local Timer interrupt
         setTIMER(TIMESLICE); // Reset del timer
-        state_t* old = (state_t *) INT_OLD_AREA();
+        state_t* old = GET_EXCEPTION_STATE_PTR(cpu);
         currentProcess->p_s = *old;
         insertProcQ(&readyQueue, currentProcess);
         scheduler();
@@ -38,13 +39,12 @@ void interruptHandler()
             insertProcQ(&readyQueue, unblocked);
         }
         // ritorna il controllo al processo corrente: fa LDST sullo stato salvato al momento dell'interruzione
-        state_t* old = (state_t *) INT_OLD_AREA();
+        int cpu = getPRID();
+        state_t* old = GET_EXCEPTION_STATE_PTR(cpu);
         currentProcess->p_s = *old;
         LDST(&(currentProcess->p_s));
         
         scheduler();
-        
-
     }
     else
     {
@@ -80,7 +80,8 @@ void interruptHandler()
         // ritorna il controllo al processo corrente o chiama lo scheduler se il processo corrente è NULL
         if (currentProcess != NULL) {
             // salva lo stato del processo corrente e inseriscilo nella Ready Queue
-            state_t* old = (state_t *) INT_OLD_AREA();
+            int cpu = getPRID();
+            state_t* old = GET_EXCEPTION_STATE_PTR(cpu);
             currentProcess->p_s = *old;
             insertProcQ(&readyQueue, currentProcess);
         }

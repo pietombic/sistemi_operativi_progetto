@@ -13,7 +13,8 @@ add_link_options(-nostdlib -T ${URISCV_SRC}/uriscvcore.ldscript -march=rv32imfd)
 add_compile_options(-ffreestanding -static -nostartfiles -nostdlib -I${URISCV_INC} -ggdb -Wall -O0 -std=gnu99 -march=rv32imafd -mabi=ilp32d)
 
 add_executable(MultiPandOS
-    ./klog.c phase1/pcb.c phase1/asl.c phase1/p1test.c
+    ./klog.c phase1/pcb.c phase1/asl.c
+	phase2/main.c
 	phase2/p2test.c
 	phase2/exception.c
 	phase2/interrupt.c

@@ -4,6 +4,7 @@
 #include "../phase1/headers/asl.h"
 #include "headers/initial.h"
 #include "headers/scheduler.h"
+#include "headers/klog.h"
 #include <uriscv/liburiscv.h>
 
 void scheduler() {
@@ -41,6 +42,7 @@ void scheduler() {
         } 
         else if (processCount > 0 && softBlockCount == 0) {
             // Caso 3: Deadlock (processi esistenti ma nessuno può essere sbloccato)
+            // klog_print("scheduler");
             PANIC(); 
         }
     }

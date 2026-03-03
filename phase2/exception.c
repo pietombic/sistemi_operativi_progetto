@@ -4,10 +4,19 @@
 #include "../phase1/headers/asl.h"
 #include "headers/initial.h"
 #include "headers/scheduler.h"
-#include "headers/excpetion.h"
+#include "headers/exception.h"
 #include "headers/interrupt.h"
 #include <uriscv/liburiscv.h>
+#include <uriscv/cpu.h>
+#include <stddef.h>
+#include "headers/klog.h"
 
+void *memcpy(void *dest, const void *src, size_t n) {
+    unsigned char *d = (unsigned char *)dest;
+    const unsigned char *s = (const unsigned char *)src;
+    for (size_t i = 0; i < n; i++) d[i] = s[i];
+    return dest;
+}
 
 void exceptionHandler() {
     // 1. Ottieni lo stato salvato al momento dell'eccezione
@@ -168,6 +177,7 @@ void waitSemaphore(state_t *state) {
         updateCPUTime(currentProcess);
         //Inserisce il PCB nell'ASL e lo blocca sul semaforo, se insertBlocked ritorna TRUE, i semafori sono finiti e si va in PANIC
         if (insertBlocked(semAdd, currentProcess)) {
+            // klog_print("wait semaphore \n");
             PANIC(); 
         }
         // 5. Chiama lo Scheduler per far partire un altro processo
@@ -221,6 +231,7 @@ void doIO(state_t *state) {
 
     //poiché i semafori dei dispositivi sono inizializzati a 0, questa operazione bloccherà sempre il processo.
     if (insertBlocked(semAdd, currentProcess)) {
+        // klog_print("do IO \n");
         PANIC(); // Errore critico se non ci sono descrittori di semaforo liberi
     }
     //il processo è ora in stato "waiting" per I/O
@@ -253,6 +264,7 @@ void waitForClock(state_t *state) {
     //se un processo tenta di bloccarsi su un semaforo nuovo ma la lista semdFree_h è vuota,
     //insertBlocked restituisce TRUE  per segnalare che non è stato possibile completare l'operazione.
     if (insertBlocked(semAdd, currentProcess)) {
+        // klog_print("wait for clock: semdFree_h is empty\n");
         PANIC(); // Errore se non ci sono descrittori di semaforo liberi [cite: 112]
     }
     softBlockCount++;
@@ -307,5 +319,37 @@ void passUpOrDie(int exceptionType, state_t *exceptionState) {
         context_t newContext = currentProcess->p_supportStruct->sup_exceptContext[exceptionType];
         LDCXT(newContext.stackPtr, newContext.status, newContext.pc);
     }
+}
+
+void programTrapHandler() {
+    // Handle program trap exception
+    // Get the current exception state
+    state_t *exceptionState = GET_EXCEPTION_STATE_PTR(0);
+    
+    // Pass up to support level or terminate
+    passUpOrDie(GENERALEXCEPT, exceptionState);
+}
+
+int *getDeviceSemaphore(int *commandAddr) {
+    // Map device command register address to semaphore index
+    // Device registers are at 0x10000054 + ((line - 3) * 0x80) + (deviceNo * 0x10)
+    // Semaphores are at deviceSemaphores[(line - 3) * 8 + deviceNo]
+    
+    unsigned int addr = (unsigned int)commandAddr;
+    
+    // Calculate device line and device number from address
+    // This is a simplified mapping - adjust based on your actual device layout
+    if (addr >= 0x10000054) {
+        unsigned int offset = addr - 0x10000054;
+        int line = (offset / 0x80) + 3;
+        int device = (offset % 0x80) / 0x10;
+        
+        if (line >= 3 && line <= 9 && device >= 0 && device <= 7) {
+            return &deviceSemaphores[(line - 3) * 8 + device];
+        }
+    }
+    
+    // Default: return NULL if mapping fails
+    return NULL;
 }
 

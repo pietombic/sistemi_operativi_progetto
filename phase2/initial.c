@@ -3,10 +3,19 @@
 #include "../phase1/headers/pcb.h"
 #include "headers/initial.h"
 #include "headers/scheduler.h"
-#include "headers/excpetion.h"
+#include "headers/exception.h"
 #include <uriscv/liburiscv.h>
+#include "headers/klog.h"
 
 extern void test();
+
+/* Global variables definitions */
+int processCount;
+int softBlockCount;
+struct list_head readyQueue;
+pcb_t *currentProcess;
+cpu_t start_time_current_quantum;
+int deviceSemaphores[SEMDEVLEN];
 
 void updateCPUTime(pcb_t *p) {
     cpu_t current_tod;
@@ -31,32 +40,28 @@ pcb_t* findProcessByPID(int pid) {
         if (p->p_pid == pid) return p;
     }
     // 3. Cerca nei processi bloccati (usando l'helper sopra)
-    return findBlockedProcessByPID(pid);
+    return NULL;
 }
 
 passupvector_t* passupvector;
 
-void uTLB_RefillHandler()
-{
-    int prid = getPRID();
-    setENTRYHI(0x80000000);
-    setENTRYLO(0x00000000);
-    TLBWR();
-    LDST((state_t *)BIOSDATAPAGE);
-}
 
-
-int main() {
+void initKernel() {
+    klog_print("init kernel");
     if (sizeof(pcb_t) > PAGESIZE) {
+        klog_print("panic init kernel: pcb_t size exceeds page size\n");
         PANIC();
     }
+
+    passupvector = (passupvector_t *) BIOSDATAPAGE;
     passupvector->tlb_refill_handler = (memaddr)uTLB_RefillHandler;
     passupvector->exception_handler = (memaddr)exceptionHandler;
     passupvector->tlb_refill_stackPtr = (memaddr)KERNELSTACK;
     passupvector->exception_stackPtr = (memaddr)KERNELSTACK;
-
+    klog_print("passupvector initialized");
     initPcbs();
     initASL();
+    klog_print("ASL initialized");
 
     processCount = 0;
     softBlockCount = 0;
@@ -93,11 +98,21 @@ int main() {
     initProcess->p_s.mie = MIE_ALL;  // Enable interrupts
     initProcess->p_s.status = MSTATUS_MPIE_MASK | MSTATUS_MPP_M;  // Kernel mode on
     RAMTOP(initProcess->p_s.gpr[2]);
-    initProcess->p_s.pc_epc = test;  // Set PC to test address
+    initProcess->p_s.pc_epc = (memaddr)test;  // Set PC to test address
     
     // Place PCB in Ready Queue and increment Process Count
     list_add(&initProcess->p_list, &readyQueue);
     processCount++;
 
     scheduler();
+}
+
+
+void uTLB_RefillHandler()
+{
+    int prid = getPRID();
+    setENTRYHI(0x80000000);
+    setENTRYLO(0x00000000);
+    TLBWR();
+    LDST((state_t *)BIOSDATAPAGE);
 }
