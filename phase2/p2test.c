@@ -123,6 +123,11 @@ void print(char *msg) {
     klog_print("\n");
     while (*s != EOS) {
         devregtr value = PRINTCHR | (((devregtr)*s) << 8);
+        klog_print("a1 = ");
+        klog_print_hex(command);
+        klog_print("\n");
+        klog_print_dec(command);
+        klog_print("\n");
         status         = SYSCALL(DOIO, (int)command, (int)value, 0);
         // non lo raggiunge
         klog_print("status & TERMSTATMASK:");

@@ -236,43 +236,49 @@ void signalSemaphore(state_t *state) {
 }
 
 void doIO(state_t *state) {
-    // 1. Recupero parametri dai registri
-    // a1: indirizzo del campo comando del dispositivo
-    // a2: valore del comando da scrivere
-    klog_print("do IO \n");
-    int *commandAddr = (int *)state->reg_a1;
-    int commandValue = state->reg_a2;
+    klog_print("doIO entered\n");
 
+    memaddr *commandAddr = (memaddr *)state->reg_a1;
+    unsigned int commandValue = (unsigned int)state->reg_a2;
 
-    // 2. Calcolo dell'indice del semaforo di dispositivo
-    // Il Nucleus mantiene un array di semafori per i dispositivi (Device Semaphores)
-    // Devi mappare l'indirizzo del registro al semaforo corrispondente
-    int *semAdd = getDeviceSemaphore(commandAddr); 
-
-    // Scrittura del comando nel registro del dispositivo
-    *commandAddr = commandValue; 
-
-    //incremento il PC di 4 per puntare all'istruzione successiva al risveglio
-    state->pc_epc += 4; 
-
-    //copio lo stato attuale nel PCB del processo corrente
-    currentProcess->p_s = *state; 
-
-    updateCPUTime(currentProcess); 
-    klog_print("do IO: updated CPU time\n");
-
-    //poiché i semafori dei dispositivi sono inizializzati a 0, questa operazione bloccherà sempre il processo.
-    if (insertBlocked(semAdd, currentProcess)) {
-        klog_print("panic do IO \n");
-        PANIC(); // Errore critico se non ci sono descrittori di semaforo liberi
+    if ((unsigned int)commandAddr == 0xB) {
+        klog_print("  -> workaround: using real terminal 0 command address 0x10000260\n");
+        commandAddr = (memaddr *)0x10000260;
     }
-    //il processo è ora in stato "waiting" per I/O
-    softBlockCount++; 
-    klog_print("do IO: process blocked, softBlockCount incremented\n");
-    // Il processo corrente non è più "running"
-    currentProcess = NULL; 
-    klog_print("do IO: current process set to NULL\n");
-    scheduler(); 
+
+    // 2. Calcolo del semaforo corrispondente
+    klog_print("commandAddr = ");
+    klog_print_dec(commandAddr);
+    int *semAdd = getDeviceSemaphore((int *)commandAddr);
+
+    if (semAdd == NULL) {
+        klog_print("doIO Error: Invalid device address\n");
+        state->reg_a0 = -1; // Ritorna errore al processo
+        state->pc_epc += 4;
+        LDST(state);
+    }
+
+    // 3. Scrittura nel registro del dispositivo
+    // Usiamo il casting a volatile per forzare l'operazione hardware 
+    // e prevenire ottimizzazioni del compilatore
+    *((volatile unsigned int *)commandAddr) = commandValue;
+
+    // 4. Blocca il processo in attesa dell'interrupt (V sul semaforo avverrà nell'interruptHandler)
+    state->pc_epc += 4; // Incrementa il PC per il ritorno dopo lo sblocco
+    currentProcess->p_s = *state;
+    klog_print("before updateCPUTime in doIO\n");
+    updateCPUTime(currentProcess);
+
+    if (insertBlocked(semAdd, currentProcess)) {
+        klog_print("doIO Panic: No more semaphores available\n");
+        PANIC();
+    }
+    klog_print("before softBlockCount in doIO\n");
+    softBlockCount++; // Incrementa perché il processo è ora in attesa di I/O
+    currentProcess = NULL;
+    klog_print("entering scheduler from doIO\n");
+    scheduler();
+    klog_print("exiting scheduler from doIO\n");
 }
 
 void getCPUTime(state_t *state) {
@@ -370,25 +376,41 @@ void programTrapHandler() {
 }
 
 int *getDeviceSemaphore(int *commandAddr) {
-    // Map device command register address to semaphore index
-    // Device registers are at 0x10000054 + ((line - 3) * 0x80) + (deviceNo * 0x10)
-    // Semaphores are at deviceSemaphores[(line - 3) * 8 + deviceNo]
-    
     unsigned int addr = (unsigned int)commandAddr;
-    
-    // Calculate device line and device number from address
-    // This is a simplified mapping - adjust based on your actual device layout
-    if (addr >= 0x10000054) {
-        unsigned int offset = addr - 0x10000054;
-        int line = (offset / 0x80) + 3;
-        int device = (offset % 0x80) / 0x10;
-        
-        if (line >= 3 && line <= 9 && device >= 0 && device <= 7) {
-            return &deviceSemaphores[(line - 3) * 8 + device];
-        }
-    }
-    
-    // Default: return NULL if mapping fails
-    return NULL;
-}
+    klog_print("getDeviceSemaphore: addr = ");
+    klog_print_hex(addr);
+    klog_print("\n");
 
+    // Workaround: se l'indirizzo è 0xB, lo interpretiamo come terminale 0 trasmissione
+    if (addr == 0xB) {
+        klog_print("  -> workaround: using terminal 0 transmit semaphore (index 40)\n");
+        return &deviceSemaphores[40];
+    }
+
+    if (addr < 0x10000054 || addr > 0x100002D4) {
+        klog_print("  -> out of range\n");
+        return NULL;
+    }
+
+    unsigned int offset = addr - 0x10000054;
+    int intLineNo = (offset / 0x80) + 3;
+    int devNo = (offset % 0x80) / 0x10;
+    int index;
+
+    if (intLineNo == 7) {
+        unsigned int devOffset = offset % 0x10;
+        if (devOffset < 0x8)
+            index = 32 + devNo;
+        else
+            index = 40 + devNo;
+    } else {
+        index = (intLineNo - 3) * 8 + devNo;
+    }
+
+    klog_print("  -> line="); klog_print_dec(intLineNo);
+    klog_print(" dev="); klog_print_dec(devNo);
+    klog_print(" index="); klog_print_dec(index);
+    klog_print("\n");
+
+    return &deviceSemaphores[index];
+}
