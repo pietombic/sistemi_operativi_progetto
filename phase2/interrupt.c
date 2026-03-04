@@ -146,7 +146,7 @@ int getDeviceNumber(unsigned int word) {
 }
 
 int highestPriorityPendingLine(){
-    int cause = getCAUSE();
+    unsigned int cause = getCAUSE();
     for (int line = 1; line <= 7; line++) {
         if (CAUSE_IP_GET(cause, line)) {
             return line; // Restituisce la linea di interruzione più alta

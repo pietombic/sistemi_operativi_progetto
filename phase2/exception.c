@@ -124,7 +124,11 @@ void createProcess(state_t *state) {
     if (newPcb == NULL) {
         state->reg_a0 = -1; //non ci sono PCB liberi
     }else {
-        newPcb->p_s = *((state_t *)state->reg_a1); //copio lo stato passato da a1 al nuovo PCB
+        if(state->reg_a1 == NULL){
+            state->reg_a0 = -1;
+        }else{
+            newPcb->p_s = *((state_t *)state->reg_a1); //copio lo stato passato da a1 al nuovo PCB
+        }
         newPcb->p_supportStruct = (support_t *)state->reg_a3; //collego il support struct passato da a3 al nuovo PCB
         newPcb->p_prio = state->reg_a2; //imposto la priorità del nuovo processo a quella passata da a2
         newPcb->p_time = 0; //inizializzo il tempo di CPU usato a 0
@@ -135,6 +139,7 @@ void createProcess(state_t *state) {
 
         processCount++; //incremento il contatore dei processi
         state->reg_a0 = newPcb->p_pid; //ritorno il PID del nuovo processo in a0
+
     }
     state->pc_epc += 4; //incremento il PC per evitare di rieseguire la system call
 
@@ -165,22 +170,24 @@ void terminateProcess(state_t *state) {
     }
 }
 
-void recursiveTerminate(pcb_t *p){
+void recursiveTerminate(pcb_t *p) {
     while (!emptyChild(p)) {
         recursiveTerminate(removeChild(p));
     }
-    //rimuovo dalle code (Ready o ASL)
+
     if (p->p_semAdd != NULL) {
-        // Se è bloccato su un semaforo, rimuovilo e aggiorna soft-block
+        int isDeviceSem = (p->p_semAdd >= &deviceSemaphores[0] &&
+                           p->p_semAdd <  &deviceSemaphores[SEMDEVLEN]);
         outBlocked(p);
-        softBlockCount--;
+        if (isDeviceSem) softBlockCount--;
     } else if (p != currentProcess) {
-        // Se è nella Ready Queue
         outProcQ(&readyQueue, p);
     }
-    // rimuovo dal genitore (se non è già stato fatto)
-    outChild(p);
-    //aggiorno contatore globale e libera PCB
+
+    if (p->p_parent != NULL) {
+        outChild(p);
+    }
+
     processCount--;
     freePcb(p);
 }
@@ -335,20 +342,23 @@ void yield(state_t *state) {
 }
 
 void passUpOrDie(int exceptionType, state_t *exceptionState) {
-    // Se il processo non ha una struttura di supporto
+    if (currentProcess == NULL) {
+        PANIC(); // non c'è nessun processo a cui "pass up" o "die"
+    }
+
     if (currentProcess->p_supportStruct == NULL) {
-        // Chiamiamo la logica di terminazione 
-        terminateProcess(exceptionState); 
-    } 
-    else {
+        // DIE: termina il processo corrente (non una syscall terminate con parametri)
+        pcb_t *victim = currentProcess;
+        currentProcess = NULL;
+        recursiveTerminate(victim);
+        scheduler(); // non ritorna
+    } else {
         updateCPUTime(currentProcess);
         currentProcess->p_supportStruct->sup_exceptState[exceptionType] = *exceptionState;
-        //Recupera il contesto per il salto al Support Level 
-        context_t newContext = currentProcess->p_supportStruct->sup_exceptContext[exceptionType];
-        LDCXT(newContext.stackPtr, newContext.status, newContext.pc);
+        context_t ctx = currentProcess->p_supportStruct->sup_exceptContext[exceptionType];
+        LDCXT(ctx.stackPtr, ctx.status, ctx.pc); // non ritorna
     }
 }
-
 void programTrapHandler() {
     // Handle program trap exception
     // Get the current exception state

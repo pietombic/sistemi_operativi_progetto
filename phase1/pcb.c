@@ -33,7 +33,6 @@ void *memset(void *s, int c, size_t n) {
 pcb_t* allocPcb() {
     if(list_empty(&pcbFree_h)) {
         return NULL;
-    
     }
     // altrimenti prendo un elemento dalla lista, lo rimuovo e lo ritorno
     // prendo il primo elemento della lista
