@@ -11,6 +11,45 @@
 #include <stddef.h>
 #include "headers/klog.h"
 
+static void copyState(state_t *dst, state_t *src) {
+    unsigned int *d = (unsigned int *) dst;
+    unsigned int *s = (unsigned int *) src;
+    for (int i = 0; i < STATE_T_SIZE_IN_BYTES / WORDLEN; i++)
+        d[i] = s[i];
+}
+
+static int isDeviceSemaphore(int *semAdd) {
+    int *base = &deviceSemaphores[0];
+    int *top  = &deviceSemaphores[SEMDEVLEN];
+
+    if (semAdd < base || semAdd >= top) return 0;
+
+    int idx = (int)(semAdd - base);
+    if (idx == 48) return 0;   /* pseudo‑clock NON è device */
+
+    return 1;
+}
+
+static void blockCurrentProcess(int *sem) {
+    if (!currentProcess) PANIC();
+
+    cpu_t current_tod;
+    STCK(current_tod);
+    currentProcess->p_time += current_tod - start_time_current_quantum;
+    start_time_current_quantum = current_tod;
+
+    currentProcess->p_semAdd = sem;
+    if (isDeviceSemaphore(sem)) {
+        softBlockCount++;
+    }
+
+    insertBlocked(sem, currentProcess);
+    currentProcess = NULL;
+    scheduler();
+}
+
+
+
 void *memcpy(void *dest, const void *src, size_t n) {
     unsigned char *d = (unsigned char *)dest;
     const unsigned char *s = (const unsigned char *)src;
@@ -237,49 +276,54 @@ void signalSemaphore(state_t *state) {
 
 void doIO(state_t *state) {
     klog_print("doIO entered\n");
+    int *commandAddr = (int *)state->reg_a1; 
+    int commandValue = (int) state->reg_a2;
 
-    memaddr *commandAddr = (memaddr *)state->reg_a1;
-    unsigned int commandValue = (unsigned int)state->reg_a2;
+    unsigned int offset = (unsigned int)commandAddr - START_DEVREG;
+    int line = (int)(offset / 0x80) + 3; // line 3-7
+    int dev = (int)((offset % 0x80) / 0x10); // dev 0-7
+    int subword = (int)((offset % 0x10) / WORDLEN); 
+    
+    int semIndex = (line == 7)
+        ? ((subword == 3) ? 32+dev : 40+dev)
+        : (((line - 3) * 8) + dev);
+    klog_print("CHECKPOINT 1 \n");
+    // FIXME: problema qui, chiama un exception PERCHEEE
+    *commandAddr = commandValue; // scrivo il comando nel registro del dispositivo
+    klog_print("CHECKPOINT 2 \n");
+    updateCPUTime(currentProcess); 
+    copyState(&currentProcess->p_s, state);
 
-    if ((unsigned int)commandAddr == 0xB) {
-        klog_print("  -> workaround: using real terminal 0 command address 0x10000260\n");
-        commandAddr = (memaddr *)0x10000260;
-    }
+    unsigned int *devBase = (unsigned int *) (START_DEVREG + (line - 3) * 0x80 + dev * 0x10);
+    int ready = 0;
 
-    // 2. Calcolo del semaforo corrispondente
-    klog_print("commandAddr = ");
-    klog_print_dec(commandAddr);
-    int *semAdd = getDeviceSemaphore((int *)commandAddr);
-
-    if (semAdd == NULL) {
-        klog_print("doIO Error: Invalid device address\n");
-        state->reg_a0 = -1; // Ritorna errore al processo
-        state->pc_epc += 4;
-        LDST(state);
-    }
-
-    // 3. Scrittura nel registro del dispositivo
-    // Usiamo il casting a volatile per forzare l'operazione hardware 
-    // e prevenire ottimizzazioni del compilatore
-    *((volatile unsigned int *)commandAddr) = commandValue;
-
-    // 4. Blocca il processo in attesa dell'interrupt (V sul semaforo avverrà nell'interruptHandler)
-    state->pc_epc += 4; // Incrementa il PC per il ritorno dopo lo sblocco
-    currentProcess->p_s = *state;
-    klog_print("before updateCPUTime in doIO\n");
-    updateCPUTime(currentProcess);
-
-    if (insertBlocked(semAdd, currentProcess)) {
-        klog_print("doIO Panic: No more semaphores available\n");
-        PANIC();
-    }
-    klog_print("before softBlockCount in doIO\n");
-    softBlockCount++; // Incrementa perché il processo è ora in attesa di I/O
-    currentProcess = NULL;
-    klog_print("entering scheduler from doIO\n");
-    scheduler();
-    klog_print("exiting scheduler from doIO\n");
+    if (line == 7) {
+                if (subword == 3) {
+                    if (!(devBase[3] & 0x1)) {
+                        deviceSemaphores[semIndex]--;
+                        blockCurrentProcess(&deviceSemaphores[semIndex]);
+                    } else {
+                        *commandAddr = commandValue;
+                        devBase[3] = 1;
+                    }
+                } else {
+                    if (!(devBase[1] & 0x1)) {
+                        deviceSemaphores[semIndex]--;
+                        blockCurrentProcess(&deviceSemaphores[semIndex]);
+                    } else {
+                        devBase[1] = 1;
+                    }
+                }
+            } else {
+                ready = devBase[1] & 0x1;
+                if (!ready) {
+                    deviceSemaphores[semIndex]--;
+                    blockCurrentProcess(&deviceSemaphores[semIndex]);
+                }
+            }
+    klog_print("doIO exiting\n");
 }
+
 
 void getCPUTime(state_t *state) {
     cpu_t current_tod;
