@@ -9,13 +9,12 @@
 
 
 void scheduler() {
-    if (!emptyProcQ(&readyQueue)) {
+    if (emptyProcQ(&readyQueue) == 0) {
         currentProcess = removeProcQ(&readyQueue);
 
         setTIMER(TIMESLICE);
-        STCK(start_time_current_quantum);
 
-        LDST(&(currentProcess->p_s));   // non ritorna
+        LDST(&(currentProcess->p_s));
     } else {
         if (processCount == 0) {
             klog_print("scheduler halt (process count == 0)\n");

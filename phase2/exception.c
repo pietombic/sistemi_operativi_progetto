@@ -90,10 +90,6 @@ void exceptionHandler() {
 }
 
 void systemCallHandler() {
-    // FIXIT: controllare perché non passa il giusto service code
-    klog_print("system call handler\n");
-    //Ottengo lo stato salvato 
-    // FIXME: rimuovere il commento in int cpu
     int cpu = getPRID();
     state_t *state = GET_EXCEPTION_STATE_PTR(cpu);
      
@@ -101,9 +97,7 @@ void systemCallHandler() {
     //Leggo il codice del servizio da a0
     int service_code = state->reg_a0;
 
-    klog_print("service code = ");
-    klog_print_dec(service_code);
-    klog_print("\n");
+
 
     //Controllo Kernel-mode per SYSCALL negative
     if (service_code < 0) {
@@ -119,9 +113,11 @@ void systemCallHandler() {
     //Smistamento dei servizi
     switch (service_code) {
         case CREATEPROCESS: // -1
+            klog_print("create process syscall\n");
             createProcess(state);
             break;
         case TERMPROCESS:   // -2
+            klog_print("terminate process syscall\n");
             terminateProcess(state);
             break;
         case PASSEREN:      // -3
@@ -210,7 +206,7 @@ void terminateProcess(state_t *state) {
 }
 
 void recursiveTerminate(pcb_t *p) {
-    while (!emptyChild(p)) {
+    while (emptyChild(p) == 0) {
         recursiveTerminate(removeChild(p));
     }
 
@@ -257,7 +253,7 @@ void waitSemaphore(state_t *state) {
     }
 }
 
-// FIXME: non aumenta il valore della variabile del semaforo, ma solo quella del processo chiamante, da capire se è un problema o no
+
 void signalSemaphore(state_t *state) {
     int *semIndex = (int *)state->reg_a1;
     (*semIndex)++;
@@ -397,12 +393,14 @@ void passUpOrDie(int exceptionType, state_t *exceptionState) {
     }
 
     if (currentProcess->p_supportStruct == NULL) {
+        klog_print("process die due to passUpOrDie\n");
         // DIE: termina il processo corrente (non una syscall terminate con parametri)
         pcb_t *victim = currentProcess;
         currentProcess = NULL;
         recursiveTerminate(victim);
         scheduler(); // non ritorna
     } else {
+        klog_print("pass up due to passUpOrDie\n");
         updateCPUTime(currentProcess);
         currentProcess->p_supportStruct->sup_exceptState[exceptionType] = *exceptionState;
         context_t ctx = currentProcess->p_supportStruct->sup_exceptContext[exceptionType];

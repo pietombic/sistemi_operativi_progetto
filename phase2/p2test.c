@@ -118,16 +118,8 @@ void print(char *msg) {
     devregtr  status;
 
     SYSCALL(PASSEREN, (int)&sem_term_mut, 0, 0); /* P(sem_term_mut) */
-    klog_print("sem_term_mut = ");
-    klog_print_dec(sem_term_mut);
-    klog_print("\n");
     while (*s != EOS) {
         devregtr value = PRINTCHR | (((devregtr)*s) << 8);
-        klog_print("a1 = ");
-        klog_print_hex(command);
-        klog_print("\n");
-        klog_print_dec(command);
-        klog_print("\n");
         status         = SYSCALL(DOIO, (int)command, (int)value, 0);
         // non lo raggiunge
         klog_print("status & TERMSTATMASK:");
@@ -161,17 +153,17 @@ void print(char *msg) {
 void test() {
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0); /* V(sem_testsem)   */
     klog_print_dec(sem_testsem);
+    klog_print("\n");
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0);
     klog_print_dec(sem_testsem);
+    klog_print("\n");
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0);
     klog_print_dec(sem_testsem);
+    klog_print("\n");
 
     if (sem_testsem != 3) {
-        klog_print("testsem != 3\n");
-        print("Error: wrong semaphore value\n");
         PANIC();
     }
-    klog_print("dopo prima passata \n");
 
     SYSCALL(PASSEREN, (int)&sem_testsem, 0, 0);
     klog_print_dec(sem_testsem);
