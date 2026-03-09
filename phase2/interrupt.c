@@ -222,6 +222,12 @@ void interruptHandler(void) {
 
         deviceSemaphores[48] = 0;
 
+        klog_print("PSEUDOCLK: sbc=");
+        klog_print_dec(softBlockCount);
+        klog_print(" sem48=");
+        klog_print_dec(deviceSemaphores[48]);
+        klog_print("\n");
+
         if (currentProcess != NULL) {
             /* Nessun cambio di processo: riprende quello interrotto */
             LDST(savedState);

@@ -12,6 +12,10 @@
 #include "headers/klog.h"
 
 //FIXME: da modificare
+
+extern int sem_testbinary; // Semaforo binario per test
+
+
 static void copyState(state_t *dst, state_t *src) {
     unsigned int *d = (unsigned int *) dst;
     unsigned int *s = (unsigned int *) src;
@@ -46,7 +50,6 @@ static void blockCurrentProcess(int *sem) {
 
     insertBlocked(sem, currentProcess);
     currentProcess = NULL;
-    klog_print("CALLING SCHEDULER FROM BLOCK\n");
     scheduler();
 }
 
@@ -80,6 +83,11 @@ static pcb_t *findActiveProcessbyID(pcb_t *pcb){
 }
 
 static void recursiveTerminateProcess(pcb_t *target){
+    klog_print("RTerm pid=");
+    klog_print_dec(target->p_pid);
+    klog_print(" semAdd=");
+    klog_print_hex((unsigned int)target->p_semAdd);
+    klog_print("\n");
     if (!target) return;
     if (target->p_pid < 0) return;
 
@@ -96,7 +104,8 @@ static void recursiveTerminateProcess(pcb_t *target){
 
         pcb_t *removed = outBlocked(target);
         if (removed) {
-            if (isDeviceSemaphore(semAdd)) {
+
+            if (isDeviceSemaphore(semAdd) || semAdd == &deviceSemaphores[48]) {
                 softBlockCount--;
             }
         }
@@ -129,9 +138,7 @@ void exceptionHandler() {
 
     updateCPUTime(currentProcess); //
 
-    klog_print("excCode = "); 
     klog_print_dec(excCode);
-    klog_print("\n");
 
     if (CAUSE_IS_INT(cause)){
         // se è un interrupt
@@ -140,27 +147,25 @@ void exceptionHandler() {
         exceptionState->pc_epc += WORDLEN;
         systemCallHandler(exceptionState);
         return;
-    }else if (excCode == 1 || excCode == 5 || excCode == 7){
-        unsigned int mpp = (exceptionState->status & MSTATUS_MPP_MASK);
-        if (mpp == MSTATUS_MPP_U) {
-            exceptionState->cause = (exceptionState->cause & CLEAREXECCODE) | (PRIVINSTR << CAUSESHIFT);
-            passUpOrDie(GENERALEXCEPT, exceptionState);
-            return;
-        }else {
+    }else if (excCode == 1 || excCode == 5 || excCode == 7) {
+        unsigned int badAddr = getBADVADDR();
+        if (badAddr >= KUSEG) {
+            // Indirizzo in spazio utente: trattalo come TLB/page fault
             passUpOrDie(PGFAULTEXCEPT, exceptionState);
-            return;
+        } else {
+            // Vero Access Fault in kernel space
+            passUpOrDie(GENERALEXCEPT, exceptionState);
         }
+        return;
     }else {
         passUpOrDie(GENERALEXCEPT, exceptionState);
         return;
-    }
+}
 }
 
 void systemCallHandler(state_t *exceptionState) {
     int service_code = (int) exceptionState->reg_a0;
-    klog_print("system call code = ");
     klog_print_dec(service_code);
-    klog_print("\n");
 
     //Controllo Kernel-mode per SYSCALL negative
     if (service_code < 0) {
@@ -183,7 +188,6 @@ void systemCallHandler(state_t *exceptionState) {
             createProcess(exceptionState);
             break;
         case TERMPROCESS:   // -2
-            klog_print("terminate process syscall\n");
             terminateProcess(exceptionState);
             break;
         case PASSEREN:      // -3
@@ -193,7 +197,6 @@ void systemCallHandler(state_t *exceptionState) {
             signalSemaphore(exceptionState);
             break;
         case DOIO:           // -5
-            klog_print("doIO syscall\n");
             doIO(exceptionState);
             break;
         case GETTIME:     // -6
@@ -246,11 +249,8 @@ void createProcess(state_t *state) {
     currentProcess = NULL;
     scheduler();
 
-    klog_print("process created with PID = ");
     klog_print_dec(newPcb->p_pid);
-    klog_print(" process count = ");
     klog_print_dec(processCount);
-    klog_print("\n");
 }
 void terminateProcess(state_t *state) {
     int pidToTerminate = (int) state->reg_a1;
@@ -279,9 +279,9 @@ void terminateProcess(state_t *state) {
     int isCurrent = (targetProcess == currentProcess);
     recursiveTerminateProcess(targetProcess);
     
-    if (isCurrent) {
-        currentProcess = NULL;
-        scheduler();
+    if (isCurrent || currentProcess == NULL) {
+    currentProcess = NULL;
+    scheduler();
     } else {
         copyState(&currentProcess->p_s, state);
         LDST(&currentProcess->p_s);
@@ -310,15 +310,17 @@ void signalSemaphore(state_t *state) {
     if ((*semAdd) <= 0) {
         pcb_t *releasedPcb = removeBlocked(semAdd);
         if (releasedPcb != NULL) {
-            klog_print("[V] done on pid: ");
             klog_print_dec(releasedPcb->p_pid);
-            klog_print("\n");
             releasedPcb->p_semAdd = NULL;
             insertProcQ(&readyQueue, releasedPcb);
         }
     }
-    //
-    
+    //FIXME:
+    /*
+    if (semAdd == &sem_testbinary && *semAdd > 1) {
+                *semAdd = 1;
+            }
+    */
     LDST(&currentProcess->p_s);
 }
 
@@ -378,7 +380,6 @@ void doIO(state_t *state) {
                     blockCurrentProcess(&deviceSemaphores[semIndex]);
                 }
             }
-    klog_print("doIO exiting...\n");
     */
 }
 
@@ -392,8 +393,13 @@ void getCPUTime(state_t *state) {
 void waitForClock(state_t *state) {
     updateCPUTime(currentProcess);
     copyState(&currentProcess->p_s, state);
-    deviceSemaphores[48]--; // pseudo-clock semaphore
+    deviceSemaphores[48]--;
     softBlockCount++;
+    klog_print("CLOCKWAIT: sbc=");
+    klog_print_dec(softBlockCount);
+    klog_print(" sem48=");
+    klog_print_dec(deviceSemaphores[48]);
+    klog_print("\n");
     blockCurrentProcess(&deviceSemaphores[48]);
 }
 
@@ -407,12 +413,13 @@ void getProcessID(state_t *state) {
     if (supIndex == 0){
         state->reg_a0 = (unsigned int) currentProcess->p_pid;
     } else {
-        if (currentProcess->p_supportStruct != NULL) {
+        if (currentProcess->p_parent != NULL) {
             state->reg_a0 = (unsigned int) currentProcess->p_parent->p_pid;
         } else {
             state->reg_a0 = 0; 
         }
     }
+    LDST(state); //
 }
 
 void yield(state_t *state) {

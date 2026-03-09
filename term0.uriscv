@@ -1,7 +1,8 @@
 p1 v(sem_testsem)
 p2 was started
 p2 starts
-error: p1/p2 synchronization bad
+p2 v's successfully
+p2 is OK
 p3 is started
 hp_p1 starts
 hp_p2 starts
@@ -12,7 +13,20 @@ p5 starts
 p6 starts
 p7 starts
 p9 starts
-memory management trap
+second incarnation of p4 starts
+Bus Error (as expected): Access non-existent memory
 p10 starts
+p4 is OK
+memory management trap
 Correct Support Structure Address
-ERROR: other program trap
+Address Error (as expected): non-kuseg access w/KU=1
+High level SYS call from kernel mode process
+p1 knows p5 ended
+p8root starts
+child1 starts
+child2 starts
+leaf process (1) starts
+leaf process (2) starts
+leaf process (3) starts
+leaf process (4) starts
+E

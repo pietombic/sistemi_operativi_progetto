@@ -106,12 +106,23 @@ void initKernel() {
     scheduler();
 }
 
-
+/*
 void uTLB_RefillHandler()
 {
     int prid = getPRID();
     setENTRYHI(0x80000000);
     setENTRYLO(0x00000000);
+    TLBWR();
+    LDST((state_t *)BIOSDATAPAGE);
+}
+*/
+void uTLB_RefillHandler() {
+    unsigned int entryHI = getENTRYHI();  // contiene il VPN che ha causato il miss
+    
+    // Identity mapping: VPN → stessa PFN, valida e dirty
+    setENTRYHI(entryHI);
+    setENTRYLO((entryHI & 0xFFFFF000) | DIRTYON | VALIDON | GLOBALON);
+    
     TLBWR();
     LDST((state_t *)BIOSDATAPAGE);
 }

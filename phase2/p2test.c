@@ -116,27 +116,19 @@ void print(char *msg) {
     devregtr *base    = (devregtr *)(TERM0ADDR);
     devregtr *command = base + 3;
     devregtr  status;
-    klog_print("[CHECKPOINT 1.5] \n");
     SYSCALL(PASSEREN, (int)&sem_term_mut, 0, 0); /* P(sem_term_mut) */
-    klog_print("[CHECKPOINT 1.6] \n");
     while (*s != EOS) {
-        klog_print("[PRE-PRINT] \n");
         devregtr value = PRINTCHR | (((devregtr)*s) << 8);
         status         = SYSCALL(DOIO, (int)command, (int)value, 0);
         
-        klog_print("status & TERMSTATMASK:");
         klog_print_hex(status & TERMSTATMASK);
-        klog_print("\n");
 
         if ((status & TERMSTATMASK) != RECVD) {
-            klog_print("Error: terminal did not receive character\n");
             PANIC();
         }
         s++;
     }
-    klog_print("[CHECKPOINT 1.7] \n");
     SYSCALL(VERHOGEN, (int)&sem_term_mut, 0, 0); /* V(sem_term_mut) */
-    klog_print("[CHECKPOINT 1.8] \n");
 }
 
 
@@ -155,12 +147,10 @@ void print(char *msg) {
 /*                 p1 -- the root process                            */
 /*                                                                   */
 void test() {
-    klog_print("[CHECKPOINT 0] \n");
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0); /* V(sem_testsem)   */   
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0);
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0);
     
-    klog_print("[CHECKPOINT 1] \n");
 
     if (sem_testsem != 3) {
         PANIC();
@@ -178,7 +168,6 @@ void test() {
     print("p1 v(sem_testsem)\n");
 
 
-    klog_print("[CHECKPOINT 2] \n");
 
     /* set up states of the other processes */
 
