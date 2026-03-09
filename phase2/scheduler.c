@@ -9,24 +9,31 @@
 
 
 void scheduler() {
-    if (emptyProcQ(&readyQueue) == 0) {
+    if (!emptyProcQ(&readyQueue)) {
         currentProcess = removeProcQ(&readyQueue);
-
-        setTIMER(TIMESLICE);
-
+        setTIMER(TIMESLICE); //
         LDST(&(currentProcess->p_s));
-    } else {
-        if (processCount == 0) {
-            klog_print("scheduler halt (process count == 0)\n");
-            HALT();
-        } else if (softBlockCount > 0) {
-            // niente ready, ma qualcuno è bloccato: idle
-            setTIMER(NEVER);                            // disabilita PLT
-            setSTATUS(getSTATUS() | MSTATUS_MIE_MASK);  // abilita interrupt globali
-            WAIT();
-            scheduler();                                // quando torna, riprova
-        } else {
-            PANIC(); // deadlock
+    }else if (processCount == 0) {
+        klog_print("Scheduler HALT, no processes left\n");
+        HALT();
+    }else if (softBlockCount > 0) {
+
+        setMIE(MIE_ALL & ~MIE_MTIE_MASK);
+        unsigned int status = getSTATUS();
+        status |= MSTATUS_MIE_MASK;
+        setSTATUS(status);
+
+        WAIT();
+    }else if (processCount > 0 && softBlockCount == 0 && emptyProcQ(&readyQueue)) {
+        //caso di deadlock, cerchiamo forzatamente un processo attivo
+        for (int i = 0; i < MAXPROC; i++){
+            if (activeProcesses[i] != NULL) {
+                currentProcess = activeProcesses[i];
+                LDST(&(currentProcess->p_s));
+            }
         }
     }
+    //vero deadlock (speriamo di non arrivarci)
+    klog_print("Scheduler PANIC, deadlock detected\n");
+    PANIC();
 }
