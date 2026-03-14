@@ -18,6 +18,7 @@ void yield(state_t *state);
 void passUpOrDie(int exceptionType, state_t *exceptionState);
 void programTrapHandler();
 int *getDeviceSemaphore(int *commandAddr);
+void checkQueue();
 
 /* Funzione per gli interrupt (definita in interrupt.c) */
 void interruptHandler();

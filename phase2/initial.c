@@ -62,8 +62,10 @@ void initKernel() {
     passupvector = (passupvector_t *) (BIOSDATAPAGE + 0x900);
     passupvector->tlb_refill_handler = (memaddr)uTLB_RefillHandler;
     passupvector->exception_handler = (memaddr)exceptionHandler;
-    passupvector->tlb_refill_stackPtr = ramtop;
-    passupvector->exception_stackPtr = ramtop - PAGESIZE;
+    //passupvector->tlb_refill_stackPtr = ramtop;
+    passupvector->tlb_refill_stackPtr = KERNELSTACK;
+    //passupvector->exception_stackPtr = ramtop - PAGESIZE;
+    passupvector->exception_stackPtr = KERNELSTACK;
 
     initPcbs();
     initASL();
@@ -94,10 +96,11 @@ void initKernel() {
     initProcess->p_supportStruct = NULL;
     initProcess->p_s.mie = MIE_ALL;  // Enable interrupts
     initProcess->p_s.status = MSTATUS_MPIE_MASK | MSTATUS_MPP_M | MSTATUS_MIE_MASK;  
-    initProcess->p_s.pc_epc = (memaddr)test;
+    initProcess->p_s.pc_epc = (memaddr) test;
     initProcess->p_prio = 0; // Priority 0 for the initial process
-    initProcess->p_s.reg_sp = ramtop - (2 * PAGESIZE); // Stack pointer for the initial process
-    RAMTOP(initProcess->p_s.gpr[2]);
+    //initProcess->p_s.reg_sp = ramtop - (2 * PAGESIZE); // Stack pointer for the initial process
+    initProcess->p_s.reg_sp = ramtop;
+    //RAMTOP(initProcess->p_s.gpr[2]);
     
     activeProcesses[0] = initProcess; // Salva il puntatore al processo iniziale nell'array dei processi attivi
     insertProcQ(&readyQueue, initProcess);
@@ -106,7 +109,7 @@ void initKernel() {
     scheduler();
 }
 
-/*
+
 void uTLB_RefillHandler()
 {
     int prid = getPRID();
@@ -115,7 +118,7 @@ void uTLB_RefillHandler()
     TLBWR();
     LDST((state_t *)BIOSDATAPAGE);
 }
-*/
+/*
 void uTLB_RefillHandler() {
     unsigned int entryHI = getENTRYHI();  // contiene il VPN che ha causato il miss
     
@@ -126,3 +129,4 @@ void uTLB_RefillHandler() {
     TLBWR();
     LDST((state_t *)BIOSDATAPAGE);
 }
+*/

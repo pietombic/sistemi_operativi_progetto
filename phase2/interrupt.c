@@ -196,6 +196,7 @@ void interruptHandler(void) {
             currentProcess->p_s.status |= MSTATUS_MIE_MASK;
 
             /* Round-robin: rimetto in ready queue */
+            checkQueue();
             insertProcQ(&readyQueue, currentProcess);
             currentProcess = NULL;
         }
@@ -221,12 +222,6 @@ void interruptHandler(void) {
         }
 
         deviceSemaphores[48] = 0;
-
-        klog_print("PSEUDOCLK: sbc=");
-        klog_print_dec(softBlockCount);
-        klog_print(" sem48=");
-        klog_print_dec(deviceSemaphores[48]);
-        klog_print("\n");
 
         if (currentProcess != NULL) {
             /* Nessun cambio di processo: riprende quello interrotto */
@@ -276,6 +271,7 @@ void interruptHandler(void) {
                         
                         unblocked->p_s.reg_a0 = savedStatus;
                         unblocked->p_semAdd   = NULL;
+                        checkQueue();
                         list_add_tail(&unblocked->p_list, &readyQueue);  // ← era insertProcQ                        
                         softBlockCount--;
                     }
@@ -295,6 +291,7 @@ void interruptHandler(void) {
                     if (unblocked != NULL) {
                         unblocked->p_s.reg_a0 = savedStatus;
                         unblocked->p_semAdd   = NULL;
+                        checkQueue();
                         insertProcQ(&readyQueue, unblocked);
                         softBlockCount--;
                     }
@@ -318,6 +315,7 @@ void interruptHandler(void) {
                 if (unblocked != NULL) {
                     unblocked->p_s.reg_a0 = savedStatus;
                     unblocked->p_semAdd   = NULL;
+                    checkQueue();
                     insertProcQ(&readyQueue, unblocked);
                     softBlockCount--;
                 }

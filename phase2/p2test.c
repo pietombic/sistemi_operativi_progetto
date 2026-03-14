@@ -120,8 +120,6 @@ void print(char *msg) {
     while (*s != EOS) {
         devregtr value = PRINTCHR | (((devregtr)*s) << 8);
         status         = SYSCALL(DOIO, (int)command, (int)value, 0);
-        
-        klog_print_hex(status & TERMSTATMASK);
 
         if ((status & TERMSTATMASK) != RECVD) {
             PANIC();
@@ -730,7 +728,9 @@ void p8leaf3() {
 void p8leaf4() {
     print("leaf process (4) starts\n");
     SYSCALL(VERHOGEN, (int)&sem_endcreate[3], 0, 0);
+    klog_print("V FATTA \n");
     SYSCALL(PASSEREN, (int)&sem_blkp8, 0, 0);
+    klog_print("P FATTA");
 }
 
 

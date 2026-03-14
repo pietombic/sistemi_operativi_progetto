@@ -13,7 +13,17 @@
 
 //FIXME: da modificare
 
-extern int sem_testbinary; // Semaforo binario per test
+void checkQueue() {
+    struct list_head *pos;
+    int count = 0;
+    list_for_each(pos, &readyQueue) {
+        count++;
+        if (count > MAXPROC + 5) {
+            klog_print("QUEUE CORRUPTED!\n");
+            PANIC();
+        }
+    }
+}
 
 
 static void copyState(state_t *dst, state_t *src) {
@@ -46,10 +56,18 @@ static void blockCurrentProcess(int *sem) {
     currentProcess->p_semAdd = sem;
     if (isDeviceSemaphore(sem)) {
         softBlockCount++;
+        klog_print("BLOCKDEV pid=");
+        klog_print_dec(currentProcess->p_pid);
+        klog_print(" idx=");
+        klog_print_dec((int)(sem - &deviceSemaphores[0]));
+        klog_print(" sbc=");
+        klog_print_dec(softBlockCount);
+        klog_print("\n");
     }
 
     insertBlocked(sem, currentProcess);
     currentProcess = NULL;
+    klog_print("CALLING SCHEDULER \n");
     scheduler();
 }
 
@@ -70,7 +88,6 @@ static void removeActiveProcess(pcb_t *pcb){
             return;
         }
     }
-    PANIC(); // Il processo da rimuovere non è stato trovato
 }
 
 static pcb_t *findActiveProcessbyID(pcb_t *pcb){
@@ -79,15 +96,10 @@ static pcb_t *findActiveProcessbyID(pcb_t *pcb){
             return activeProcesses[i];
         }
     }
-    PANIC(); // Il processo da rimuovere non è stato trovato
+    return NULL;
 }
 
 static void recursiveTerminateProcess(pcb_t *target){
-    klog_print("RTerm pid=");
-    klog_print_dec(target->p_pid);
-    klog_print(" semAdd=");
-    klog_print_hex((unsigned int)target->p_semAdd);
-    klog_print("\n");
     if (!target) return;
     if (target->p_pid < 0) return;
 
@@ -117,6 +129,9 @@ static void recursiveTerminateProcess(pcb_t *target){
     }
     freePcb(target);
     processCount--;
+    klog_print("PC=");
+    klog_print_dec(processCount);
+    klog_print("\n");
 }
 
 
@@ -131,14 +146,15 @@ void *memcpy(void *dest, const void *src, size_t n) {
     return dest;
 }
 
+//FIXME: da rigurdare
+
 void exceptionHandler() {
     state_t *exceptionState = (state_t *) BIOSDATAPAGE;
     unsigned int cause = exceptionState->cause;
     unsigned int excCode = cause & CAUSE_EXCCODE_MASK;
 
-    updateCPUTime(currentProcess); //
+    //updateCPUTime(currentProcess); //
 
-    klog_print_dec(excCode);
 
     if (CAUSE_IS_INT(cause)){
         // se è un interrupt
@@ -160,18 +176,17 @@ void exceptionHandler() {
     }else {
         passUpOrDie(GENERALEXCEPT, exceptionState);
         return;
-}
+    }
 }
 
 void systemCallHandler(state_t *exceptionState) {
     int service_code = (int) exceptionState->reg_a0;
-    klog_print_dec(service_code);
-
+    
     //Controllo Kernel-mode per SYSCALL negative
     if (service_code < 0) {
         if ((exceptionState->status & MSTATUS_MPP_MASK) == MSTATUS_MPP_U) {
             //Simula Program Trap per istruzione privilegiata
-            exceptionState->cause = 10; //? instruzione privata 
+           // exceptionState->cause = 10; //? instruzione privata 
             passUpOrDie(GENERALEXCEPT, exceptionState); //programtrapHandler
             return;
         }
@@ -230,7 +245,9 @@ void createProcess(state_t *state) {
         state->reg_a0 = (unsigned int) -1; 
         copyState(&currentProcess->p_s, state); 
         LDST(&currentProcess->p_s);
+        return;
     }
+    
     copyState(&newPcb->p_s, (state_t *)state->reg_a1);
 
     newPcb->p_supportStruct = (support_t *)state->reg_a3; 
@@ -242,15 +259,14 @@ void createProcess(state_t *state) {
     insertChild(currentProcess, newPcb); 
     insertProcQ(&readyQueue, newPcb); 
 
-    processCount++; //incremento il contatore dei processi
+    processCount++; 
     state->reg_a0 = (unsigned int) newPcb->p_pid; 
     copyState(&currentProcess->p_s, state);
+
+    //FIXME: da capire perchè
     insertProcQ(&readyQueue, currentProcess);
     currentProcess = NULL;
     scheduler();
-
-    klog_print_dec(newPcb->p_pid);
-    klog_print_dec(processCount);
 }
 void terminateProcess(state_t *state) {
     int pidToTerminate = (int) state->reg_a1;
@@ -293,9 +309,10 @@ void waitSemaphore(state_t *state) {
     updateCPUTime(currentProcess);
     copyState(&currentProcess->p_s, state);
     (*semAdd)--;
-
     if ((*semAdd) < 0) {        
+        klog_print("DENTRO IF \n");
         blockCurrentProcess(semAdd);
+        klog_print("BLOCCATO \n");
     } 
     LDST(&currentProcess->p_s);
 }
@@ -310,13 +327,13 @@ void signalSemaphore(state_t *state) {
     if ((*semAdd) <= 0) {
         pcb_t *releasedPcb = removeBlocked(semAdd);
         if (releasedPcb != NULL) {
-            klog_print_dec(releasedPcb->p_pid);
             releasedPcb->p_semAdd = NULL;
+            checkQueue();
             insertProcQ(&readyQueue, releasedPcb);
         }
     }
     //FIXME:
-    /*
+    /*  
     if (semAdd == &sem_testbinary && *semAdd > 1) {
                 *semAdd = 1;
             }
@@ -395,11 +412,6 @@ void waitForClock(state_t *state) {
     copyState(&currentProcess->p_s, state);
     deviceSemaphores[48]--;
     softBlockCount++;
-    klog_print("CLOCKWAIT: sbc=");
-    klog_print_dec(softBlockCount);
-    klog_print(" sem48=");
-    klog_print_dec(deviceSemaphores[48]);
-    klog_print("\n");
     blockCurrentProcess(&deviceSemaphores[48]);
 }
 
@@ -425,6 +437,7 @@ void getProcessID(state_t *state) {
 void yield(state_t *state) {
     updateCPUTime(currentProcess); 
     copyState(&currentProcess->p_s, state);
+    checkQueue();
     insertProcQ(&readyQueue, currentProcess);
     currentProcess = NULL;
     scheduler(); 
