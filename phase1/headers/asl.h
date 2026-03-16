@@ -23,4 +23,7 @@ pcb_t* outBlocked(pcb_t* p);
 // Return the first blocked PCB of the semaphore with key "semAdd"
 pcb_t* headBlocked(int* semAdd);
 
+// Return the number of processes blocked on the semaphore with key "semAdd"
+int blockedCount(int* semAdd);
+
 #endif

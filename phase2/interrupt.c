@@ -196,7 +196,7 @@ void interruptHandler(void) {
             currentProcess->p_s.status |= MSTATUS_MIE_MASK;
 
             /* Round-robin: rimetto in ready queue */
-            checkQueue();
+            
             insertProcQ(&readyQueue, currentProcess);
             currentProcess = NULL;
         }
@@ -271,8 +271,8 @@ void interruptHandler(void) {
                         
                         unblocked->p_s.reg_a0 = savedStatus;
                         unblocked->p_semAdd   = NULL;
-                        checkQueue();
-                        list_add_tail(&unblocked->p_list, &readyQueue);  // ← era insertProcQ                        
+                        
+                        insertProcQ(&readyQueue, unblocked);
                         softBlockCount--;
                     }
                 }
@@ -291,7 +291,6 @@ void interruptHandler(void) {
                     if (unblocked != NULL) {
                         unblocked->p_s.reg_a0 = savedStatus;
                         unblocked->p_semAdd   = NULL;
-                        checkQueue();
                         insertProcQ(&readyQueue, unblocked);
                         softBlockCount--;
                     }
@@ -315,7 +314,6 @@ void interruptHandler(void) {
                 if (unblocked != NULL) {
                     unblocked->p_s.reg_a0 = savedStatus;
                     unblocked->p_semAdd   = NULL;
-                    checkQueue();
                     insertProcQ(&readyQueue, unblocked);
                     softBlockCount--;
                 }

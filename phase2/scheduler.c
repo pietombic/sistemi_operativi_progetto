@@ -10,7 +10,6 @@
 
 void scheduler() {
     if (!emptyProcQ(&readyQueue)) {
-        klog_print("SONO QUI! \n");
         currentProcess = removeProcQ(&readyQueue);
         setTIMER(TIMESLICE); 
         LDST(&(currentProcess->p_s));
@@ -23,19 +22,8 @@ void scheduler() {
         unsigned int status = getSTATUS();
         status |= MSTATUS_MIE_MASK;
         setSTATUS(status);
-        klog_print("STO ANDANDO IN WAIT \n");
         WAIT();
     }else if (processCount > 0 && softBlockCount == 0 && emptyProcQ(&readyQueue)) {
-        //caso di deadlock, cerchiamo forzatamente un processo attivo
-        
-        for (int i = 0; i < MAXPROC; i++){
-            if (activeProcesses[i] != NULL) {
-                currentProcess = activeProcesses[i];
-                LDST(&(currentProcess->p_s));
-            }
-        }
+       PANIC();
     }
-    //vero deadlock (speriamo di non arrivarci)
-    klog_print("DEADLOCK\n");
-    PANIC();
 }

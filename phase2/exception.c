@@ -13,17 +13,7 @@
 
 //FIXME: da modificare
 
-void checkQueue() {
-    struct list_head *pos;
-    int count = 0;
-    list_for_each(pos, &readyQueue) {
-        count++;
-        if (count > MAXPROC + 5) {
-            klog_print("QUEUE CORRUPTED!\n");
-            PANIC();
-        }
-    }
-}
+extern int sem_testbinary;
 
 
 static void copyState(state_t *dst, state_t *src) {
@@ -56,26 +46,18 @@ static void blockCurrentProcess(int *sem) {
     currentProcess->p_semAdd = sem;
     if (isDeviceSemaphore(sem)) {
         softBlockCount++;
-        klog_print("BLOCKDEV pid=");
-        klog_print_dec(currentProcess->p_pid);
-        klog_print(" idx=");
-        klog_print_dec((int)(sem - &deviceSemaphores[0]));
-        klog_print(" sbc=");
-        klog_print_dec(softBlockCount);
-        klog_print("\n");
     }
 
     insertBlocked(sem, currentProcess);
     currentProcess = NULL;
-    klog_print("CALLING SCHEDULER \n");
     scheduler();
 }
 
-static void addActiveProcess(pcb_t *pcb){
+static int addActiveProcess(pcb_t *pcb){
     for (int i = 0; i < MAXPROC; i++) {
         if (activeProcesses[i] == NULL) {
             activeProcesses[i] = pcb;
-            return;
+            return i;
         }
     }
     PANIC(); // Non ci sono slot disponibili per nuovi processi
@@ -120,6 +102,7 @@ static void recursiveTerminateProcess(pcb_t *target){
             if (isDeviceSemaphore(semAdd) || semAdd == &deviceSemaphores[48]) {
                 softBlockCount--;
             }
+            (*semAdd)++;
         }
     }
 
@@ -129,9 +112,6 @@ static void recursiveTerminateProcess(pcb_t *target){
     }
     freePcb(target);
     processCount--;
-    klog_print("PC=");
-    klog_print_dec(processCount);
-    klog_print("\n");
 }
 
 
@@ -255,7 +235,7 @@ void createProcess(state_t *state) {
     newPcb->p_time = 0; 
     newPcb->p_semAdd = NULL; 
 
-    addActiveProcess(newPcb);
+    newPcb->p_pid = addActiveProcess(newPcb);
     insertChild(currentProcess, newPcb); 
     insertProcQ(&readyQueue, newPcb); 
 
@@ -266,6 +246,9 @@ void createProcess(state_t *state) {
     //FIXME: da capire perchè
     insertProcQ(&readyQueue, currentProcess);
     currentProcess = NULL;
+    klog_print("[CREATE] creato processo:");
+    klog_print_dec(newPcb->p_pid);
+    klog_print("\n");
     scheduler();
 }
 void terminateProcess(state_t *state) {
@@ -309,10 +292,8 @@ void waitSemaphore(state_t *state) {
     updateCPUTime(currentProcess);
     copyState(&currentProcess->p_s, state);
     (*semAdd)--;
-    if ((*semAdd) < 0) {        
-        klog_print("DENTRO IF \n");
+    if ((*semAdd) < 0) {
         blockCurrentProcess(semAdd);
-        klog_print("BLOCCATO \n");
     } 
     LDST(&currentProcess->p_s);
 }
@@ -328,7 +309,6 @@ void signalSemaphore(state_t *state) {
         pcb_t *releasedPcb = removeBlocked(semAdd);
         if (releasedPcb != NULL) {
             releasedPcb->p_semAdd = NULL;
-            checkQueue();
             insertProcQ(&readyQueue, releasedPcb);
         }
     }
@@ -337,6 +317,7 @@ void signalSemaphore(state_t *state) {
     if (semAdd == &sem_testbinary && *semAdd > 1) {
                 *semAdd = 1;
             }
+            
     */
     LDST(&currentProcess->p_s);
 }
@@ -437,7 +418,6 @@ void getProcessID(state_t *state) {
 void yield(state_t *state) {
     updateCPUTime(currentProcess); 
     copyState(&currentProcess->p_s, state);
-    checkQueue();
     insertProcQ(&readyQueue, currentProcess);
     currentProcess = NULL;
     scheduler(); 

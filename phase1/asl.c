@@ -144,3 +144,29 @@ pcb_t* headBlocked(int* semAdd) {
     // Se trovato, ritorna la testa della coda di processi
     return headProcQ(&semd->s_procq);
 }
+
+// Return the number of processes blocked on the semaphore with key "semAdd"
+int blockedCount(int* semAdd) {
+    // Cerca il descrittore di semaforo nella ASL
+    semd_t* semd = NULL;
+    struct list_head* pos;
+    //itero tutta la lista dei semd per trovare quello con chiave = semAdd
+    list_for_each(pos, &semd_h) {
+        semd_t* current = container_of(pos, semd_t, s_link);
+        if (current->s_key == semAdd) {
+            semd = current;
+            break;
+        }
+    }
+    
+    if (semd == NULL) {
+        return 0; // Se il semaforo non esiste, nessun processo bloccato
+    }
+    
+    // Conta i processi nella coda
+    int count = 0;
+    list_for_each(pos, &semd->s_procq) {
+        count++;
+    }
+    return count;
+}
