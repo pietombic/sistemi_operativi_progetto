@@ -16,6 +16,7 @@ add_executable(MultiPandOS
     ./klog.c phase1/pcb.c phase1/asl.c
 	phase2/main.c
 	phase2/p2test.c
+	phase2/functions.c
 	phase2/exception.c
 	phase2/interrupt.c
 	phase2/initial.c

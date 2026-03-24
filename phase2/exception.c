@@ -10,153 +10,35 @@
 #include <uriscv/cpu.h>
 #include <stddef.h>
 #include "headers/klog.h"
-
-//FIXME: da modificare
-
-extern int sem_testbinary;
-
-
-static void copyState(state_t *dst, state_t *src) {
-    unsigned int *d = (unsigned int *) dst;
-    unsigned int *s = (unsigned int *) src;
-    for (int i = 0; i < STATE_T_SIZE_IN_BYTES / WORDLEN; i++)
-        d[i] = s[i];
-}
-
-static int isDeviceSemaphore(int *semAdd) {
-    int *base = &deviceSemaphores[0];
-    int *top  = &deviceSemaphores[SEMDEVLEN];
-
-    if (semAdd < base || semAdd >= top) return 0;
-
-    int idx = (int)(semAdd - base);
-    if (idx == 48) return 0;   /* pseudo‑clock NON è device */
-
-    return 1;
-}
-
-static void blockCurrentProcess(int *sem) {
-    if (!currentProcess) PANIC();
-
-    cpu_t current_tod;
-    STCK(current_tod);
-    currentProcess->p_time += current_tod - start_time_current_quantum;
-    start_time_current_quantum = current_tod;
-
-    currentProcess->p_semAdd = sem;
-    if (isDeviceSemaphore(sem)) {
-        softBlockCount++;
-    }
-
-    insertBlocked(sem, currentProcess);
-    currentProcess = NULL;
-    scheduler();
-}
-
-static int addActiveProcess(pcb_t *pcb){
-    for (int i = 0; i < MAXPROC; i++) {
-        if (activeProcesses[i] == NULL) {
-            activeProcesses[i] = pcb;
-            return i;
-        }
-    }
-    PANIC(); // Non ci sono slot disponibili per nuovi processi
-}
-
-static void removeActiveProcess(pcb_t *pcb){
-    for (int i = 0; i < MAXPROC; i++) {
-        if (activeProcesses[i] == pcb) {
-            activeProcesses[i] = NULL;
-            return;
-        }
-    }
-}
-
-static pcb_t *findActiveProcessbyID(pcb_t *pcb){
-    for (int i = 0; i < MAXPROC; i++) {
-        if (activeProcesses[i] && activeProcesses[i]->p_pid == pcb->p_pid) {
-            return activeProcesses[i];
-        }
-    }
-    return NULL;
-}
-
-static void recursiveTerminateProcess(pcb_t *target){
-    if (!target) return;
-    if (target->p_pid < 0) return;
-
-    target->p_pid = -1; // Segna il processo come terminato
-    pcb_t *child;
-    while ((child = removeChild(target)) != NULL) {
-        recursiveTerminateProcess(child);
-    }
-
-    removeActiveProcess(target);
-
-    if (target->p_semAdd != NULL){
-        int *semAdd = target->p_semAdd;
-
-        pcb_t *removed = outBlocked(target);
-        if (removed) {
-
-            if (isDeviceSemaphore(semAdd) || semAdd == &deviceSemaphores[48]) {
-                softBlockCount--;
-            }
-            (*semAdd)++;
-        }
-    }
-
-    outProcQ(&readyQueue, target);
-    if (target == currentProcess) {
-        currentProcess = NULL;
-    }
-    freePcb(target);
-    processCount--;
-}
-
-
-//FIXME: fino a qua
-
-
-
-void *memcpy(void *dest, const void *src, size_t n) {
-    unsigned char *d = (unsigned char *)dest;
-    const unsigned char *s = (const unsigned char *)src;
-    for (size_t i = 0; i < n; i++) d[i] = s[i];
-    return dest;
-}
-
-//FIXME: da rigurdare
+#include "headers/functions.h"
 
 void exceptionHandler() {
     state_t *exceptionState = (state_t *) BIOSDATAPAGE;
-    unsigned int cause = exceptionState->cause;
+    unsigned int cause   = exceptionState->cause;
     unsigned int excCode = cause & CAUSE_EXCCODE_MASK;
 
-    //updateCPUTime(currentProcess); //
-
-
-    if (CAUSE_IS_INT(cause)){
-        // se è un interrupt
+    //the exception was an interrupt 
+    if (CAUSE_IS_INT(cause)) {
         interruptHandler();
-    }else if (excCode == 8 || excCode == 11) {
+        return;
+    }
+
+    //passing up to the syscallhandler
+    if (excCode == 8 || excCode == 11) {
         exceptionState->pc_epc += WORDLEN;
         systemCallHandler(exceptionState);
         return;
-    }else if (excCode == 1 || excCode == 5 || excCode == 7) {
-        unsigned int badAddr = getBADVADDR();
-        if (badAddr >= KUSEG) {
-            // Indirizzo in spazio utente: trattalo come TLB/page fault
-            passUpOrDie(PGFAULTEXCEPT, exceptionState);
-        } else {
-            // Vero Access Fault in kernel space
-            passUpOrDie(GENERALEXCEPT, exceptionState);
-        }
-        return;
-    }else {
-        passUpOrDie(GENERALEXCEPT, exceptionState);
+    }
+
+    /* memory access fault (instruction=1, load=5, store=7):
+       user-space address → page fault, kernel-space → general exception */
+    if (excCode == 1 || excCode == 5 || excCode == 7) {
+        int exType = (getBADVADDR() >= KUSEG) ? PGFAULTEXCEPT : GENERALEXCEPT;
+        passUpOrDie(exType, exceptionState);
         return;
     }
+
+    passUpOrDie(GENERALEXCEPT, exceptionState);
 }
 
 void systemCallHandler(state_t *exceptionState) {
@@ -165,9 +47,7 @@ void systemCallHandler(state_t *exceptionState) {
     //Controllo Kernel-mode per SYSCALL negative
     if (service_code < 0) {
         if ((exceptionState->status & MSTATUS_MPP_MASK) == MSTATUS_MPP_U) {
-            //Simula Program Trap per istruzione privilegiata
-           // exceptionState->cause = 10; //? instruzione privata 
-            passUpOrDie(GENERALEXCEPT, exceptionState); //programtrapHandler
+            passUpOrDie(GENERALEXCEPT, exceptionState); 
             return;
         }
     }
@@ -177,7 +57,8 @@ void systemCallHandler(state_t *exceptionState) {
         return;
     }
 
-    //Smistamento dei servizi
+    //switching on the different services
+
     switch (service_code) {
         case CREATEPROCESS: // -1
             createProcess(exceptionState);
@@ -186,10 +67,10 @@ void systemCallHandler(state_t *exceptionState) {
             terminateProcess(exceptionState);
             break;
         case PASSEREN:      // -3
-            waitSemaphore(exceptionState);
+            passeren(exceptionState);
             break;
         case VERHOGEN:      // -4
-            signalSemaphore(exceptionState);
+            verhogen(exceptionState);
             break;
         case DOIO:           // -5
             doIO(exceptionState);
@@ -211,95 +92,101 @@ void systemCallHandler(state_t *exceptionState) {
             break;
         
         default:
-            // Se a0 >= 1 o è un codice non gestito, 
-            // passa la gestione al Support Level (Pass Up or Die)
             passUpOrDie(GENERALEXCEPT, exceptionState);
             break;
     }
 }
 
-//FIXME: da rivedere la fine 
+/*
+    allocates a new PCB, initializes it with the state/priority/support
+    passed by the caller, inserts it as a child of currentProcess and
+    puts it in the ready queue. Returns the new PID in reg_a0, or -1
+    if no free PCB is available.
+*/
 void createProcess(state_t *state) {
-    pcb_t *newPcb = allocPcb(); 
+    pcb_t *newPcb = allocPcb();
+
+    //no free PCB
     if (newPcb == NULL) {
-        state->reg_a0 = (unsigned int) -1; 
-        copyState(&currentProcess->p_s, state); 
+        state->reg_a0 = (unsigned int) -1;
+        copyState(&currentProcess->p_s, state);
         LDST(&currentProcess->p_s);
         return;
     }
-    
+
     copyState(&newPcb->p_s, (state_t *)state->reg_a1);
 
-    newPcb->p_supportStruct = (support_t *)state->reg_a3; 
+    //initializing the new process
+    newPcb->p_supportStruct = (support_t *)state->reg_a3;
     newPcb->p_prio = (int) state->reg_a2;
-    newPcb->p_time = 0; 
-    newPcb->p_semAdd = NULL; 
+    newPcb->p_time = 0;
+    newPcb->p_semAdd = NULL;
 
-    newPcb->p_pid = addActiveProcess(newPcb);
-    insertChild(currentProcess, newPcb); 
-    insertProcQ(&readyQueue, newPcb); 
+    insertChild(currentProcess, newPcb);
+    insertProcQ(&readyQueue, newPcb);
+    processCount++;
 
-    processCount++; 
-    state->reg_a0 = (unsigned int) newPcb->p_pid; 
+    //returning the pid of the new process to the caller
+    state->reg_a0 = (unsigned int) newPcb->p_pid;
     copyState(&currentProcess->p_s, state);
-
-    //FIXME: da capire perchè
-    insertProcQ(&readyQueue, currentProcess);
-    currentProcess = NULL;
-    klog_print("[CREATE] creato processo:");
-    klog_print_dec(newPcb->p_pid);
-    klog_print("\n");
-    scheduler();
+    LDST(state);
 }
+
+/*
+    terminates the process identified by reg_a1 (0 = self) and its
+    entire progeny. if the terminated process was currentProcess,
+    the scheduler is invoked to pick the next one.
+*/
 void terminateProcess(state_t *state) {
     int pidToTerminate = (int) state->reg_a1;
     updateCPUTime(currentProcess);
-    
+
     pcb_t *targetProcess;
     if (pidToTerminate == 0) {
         targetProcess = currentProcess;
     } else {
-        // cerca per valore PID, non per puntatore
-        targetProcess = NULL;
-        for (int i = 0; i < MAXPROC; i++) {
-            if (activeProcesses[i] != NULL && 
-                activeProcesses[i]->p_pid == pidToTerminate) {
-                targetProcess = activeProcesses[i];
-                break;
-            }
-        }
+        targetProcess = findInTree(rootProcess, pidToTerminate);
     }
-    
+
+    //pid not found: return to caller
     if (targetProcess == NULL) {
         LDST(state);
         return;
     }
-    
+
     int isCurrent = (targetProcess == currentProcess);
     recursiveTerminateProcess(targetProcess);
-    
+
     if (isCurrent || currentProcess == NULL) {
-    currentProcess = NULL;
-    scheduler();
+        currentProcess = NULL;
+        scheduler();
     } else {
         copyState(&currentProcess->p_s, state);
         LDST(&currentProcess->p_s);
     }
 }
 
-void waitSemaphore(state_t *state) {
-    int *semAdd = (int *) state->reg_a1; 
+/*
+    P (wait) on the semaphore at reg_a1. decrements the counter;
+    if it goes negative the process blocks on the semaphore.
+*/
+void passeren(state_t *state) {
+    int *semAdd = (int *) state->reg_a1;
     updateCPUTime(currentProcess);
     copyState(&currentProcess->p_s, state);
     (*semAdd)--;
     if ((*semAdd) < 0) {
         blockCurrentProcess(semAdd);
-    } 
+    }
     LDST(&currentProcess->p_s);
 }
 
-
-void signalSemaphore(state_t *state) {
+/*
+    V (signal) on the semaphore at reg_a1. increments the counter;
+    if there are blocked processes, the first one is unblocked and
+    moved to the ready queue.
+*/
+void verhogen(state_t *state) {
     int *semAdd = (int *) state->reg_a1;
     updateCPUTime(currentProcess);
     copyState(&currentProcess->p_s, state);
@@ -312,128 +199,105 @@ void signalSemaphore(state_t *state) {
             insertProcQ(&readyQueue, releasedPcb);
         }
     }
-    //FIXME:
-    /*  
-    if (semAdd == &sem_testbinary && *semAdd > 1) {
-                *semAdd = 1;
-            }
-            
-    */
+
     LDST(&currentProcess->p_s);
 }
 
+/*
+    writes commandValue to the device register at commandAddr, then
+    blocks the process on the corresponding device semaphore waiting
+    for the interrupt. for terminals, TX and RX have separate semaphores.
+*/
 void doIO(state_t *state) {
-    int *commandAddr = (int *)state->reg_a1; 
-    int commandValue = (int) state->reg_a2;
+    unsigned int commandAddr  = (unsigned int)state->reg_a1;
+    unsigned int commandValue = (unsigned int)state->reg_a2;
 
-    unsigned int offset = (unsigned int)commandAddr - START_DEVREG;
-    int line = (int)(offset / 0x80) + 3; // line 3-7
-    int dev = (int)((offset % 0x80) / 0x10); // dev 0-7
-    int subword = (int)((offset % 0x10) / WORDLEN); 
-    
-    int semIndex = (line == 7)
-        ? ((subword == 3) ? 32+dev : 40+dev)
-        : (((line - 3) * 8) + dev);
-    
-    // FIXME: problema qui, chiama un exception PERCHEEE
-    //*commandAddr = commandValue; // scrivo il comando nel registro del dispositivo
-    
-    updateCPUTime(currentProcess); 
+    //validate the device register address
+    if (commandAddr < START_DEVREG || commandAddr > 0x100002D4) {
+        state->reg_a0 = -1;
+        LDST(state);
+        return;
+    }
+
+    //compute semaphore index from the device register address
+    unsigned int offset = commandAddr - START_DEVREG;
+    int line = (offset / 0x80) + 3;
+    int dev  = (offset % 0x80) / 0x10;
+
+    int semIndex;
+    if (line == 7) {
+        //terminals have two subdevices: TX (offset >= 8) and RX
+        int isWrite = ((offset % 0x10) >= 0x8);
+        semIndex = isWrite ? (40 + dev) : (32 + dev);
+    } else {
+        semIndex = (line - 3) * 8 + dev;
+    }
+
+    updateCPUTime(currentProcess);
     copyState(&currentProcess->p_s, state);
 
     deviceSemaphores[semIndex]--;
-    *commandAddr = commandValue;  // scrivi il comando QUI, dopo aver decrementato
-    blockCurrentProcess(&deviceSemaphores[semIndex]);
-    /*
-    unsigned int *devBase = (unsigned int *) (START_DEVREG + (line - 3) * 0x80 + dev * 0x10);
-    int ready = 0;
 
-    if (line == 7) {
-            if (subword == 3) {
-                if (!(devBase[3] & 0x1)) {
-                    deviceSemaphores[semIndex]--;
-                    blockCurrentProcess(&deviceSemaphores[semIndex]);
-                } else {
-                    unsigned int status = devBase[2];
-                    *commandAddr = commandValue;
-                    devBase[3] = 1;
-                    state->reg_a0 = status;
-                    LDST(&currentProcess->p_s);
-                }
-            } else {
-                if (!(devBase[1] & 0x1)) {
-                    deviceSemaphores[semIndex]--;
-                    blockCurrentProcess(&deviceSemaphores[semIndex]);
-                } else {
-                    unsigned int status = devBase[0];
-                    devBase[1] = 1;
-                    state->reg_a0 = status;
-                    LDST(&currentProcess->p_s);
-                }
-            }
-            } else {
-                ready = devBase[1] & 0x1;
-                if (!ready) {
-                    deviceSemaphores[semIndex]--;
-                    blockCurrentProcess(&deviceSemaphores[semIndex]);
-                }
-            }
-    */
+    //volatile write to avoid a PLT interrupt before the device sees the command
+    *((volatile unsigned int *)commandAddr) = commandValue;
+
+    blockCurrentProcess(&deviceSemaphores[semIndex]);
 }
 
-
+/*
+    returns the accumulated CPU time of currentProcess in reg_a0.
+*/
 void getCPUTime(state_t *state) {
     updateCPUTime(currentProcess);
     state->reg_a0 = (unsigned int) currentProcess->p_time;
     LDST(state);
 }
 
+/*
+    blocks the process on the pseudo-clock semaphore until the next
+    100ms interval timer tick.
+*/
 void waitForClock(state_t *state) {
     updateCPUTime(currentProcess);
     copyState(&currentProcess->p_s, state);
     deviceSemaphores[48]--;
-    softBlockCount++;
     blockCurrentProcess(&deviceSemaphores[48]);
 }
 
+/*
+    returns the support structure pointer of currentProcess in reg_a0,
+    or NULL if none was set at creation time.
+*/
 void getSupportData(state_t *state) {
     state->reg_a0 = (unsigned int) currentProcess->p_supportStruct;
     LDST(state);
 }
 
+/*
+    returns the PID of currentProcess (reg_a1 == 0) or of its parent
+    (reg_a1 != 0) in reg_a0. returns 0 if the parent does not exist.
+*/
 void getProcessID(state_t *state) {
     int supIndex = (int) state->reg_a1;
-    if (supIndex == 0){
+    if (supIndex == 0) {
         state->reg_a0 = (unsigned int) currentProcess->p_pid;
     } else {
-        if (currentProcess->p_parent != NULL) {
-            state->reg_a0 = (unsigned int) currentProcess->p_parent->p_pid;
-        } else {
-            state->reg_a0 = 0; 
-        }
+        state->reg_a0 = (currentProcess->p_parent != NULL)
+                        ? (unsigned int) currentProcess->p_parent->p_pid
+                        : 0;
     }
-    LDST(state); //
+    LDST(state);
 }
 
+/*
+    voluntarily relinquishes the CPU. currentProcess is put back at the
+    tail of its priority band and the scheduler picks the next process.
+*/
 void yield(state_t *state) {
-    updateCPUTime(currentProcess); 
+    updateCPUTime(currentProcess);
     copyState(&currentProcess->p_s, state);
     insertProcQ(&readyQueue, currentProcess);
     currentProcess = NULL;
-    scheduler(); 
+    scheduler();
 }
 
-void passUpOrDie(int exceptionType, state_t *exceptionState) {
-    if (currentProcess->p_supportStruct == NULL) {
-        // DIE: termina il processo corrente (non una syscall terminate con parametri)
-        updateCPUTime(currentProcess);
-        recursiveTerminateProcess(currentProcess);
-        currentProcess = NULL;
-        scheduler();
-    } else {
-        support_t *sup = currentProcess->p_supportStruct;
-        copyState(&sup->sup_exceptState[exceptionType], (state_t *) exceptionState);
-        context_t *newContext = &sup->sup_exceptContext[exceptionType];
-        LDCXT(newContext->stackPtr, newContext->status, newContext->pc);
-    }
-}

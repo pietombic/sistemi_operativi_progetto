@@ -10,20 +10,27 @@
 
 void scheduler() {
     if (!emptyProcQ(&readyQueue)) {
+        //dispatching the ready process
         currentProcess = removeProcQ(&readyQueue);
+        
+        //setting process timer
         setTIMER(TIMESLICE); 
+
         LDST(&(currentProcess->p_s));
     }else if (processCount == 0) {
         klog_print("Scheduler HALT, no processes left\n");
         HALT();
     }else if (processCount > 0 && softBlockCount > 0 ) {
-        
+        // pasted from p2 specs
         setMIE(MIE_ALL & ~MIE_MTIE_MASK);
         unsigned int status = getSTATUS();
         status |= MSTATUS_MIE_MASK;
         setSTATUS(status);
+        
+        //waiting for a blocked process to be ready
         WAIT();
     }else if (processCount > 0 && softBlockCount == 0 && emptyProcQ(&readyQueue)) {
-       PANIC();
+        klog_print("DEADLOCK ! \n");
+        PANIC();
     }
 }

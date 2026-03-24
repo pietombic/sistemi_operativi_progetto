@@ -11,17 +11,10 @@
 #include <uriscv/cpu.h>
 #include <uriscv/arch.h>
 #include "headers/klog.h"
+#include "headers/functions.h"
 
 extern void scheduler();
 
-/* Helper per copiare lo stato in modo sicuro */
-static void copyState(state_t *dst, state_t *src) {
-    unsigned int *d = (unsigned int *) dst;
-    unsigned int *s = (unsigned int *) src;
-    for (int i = 0; i < STATE_T_SIZE_IN_BYTES / WORDLEN; i++) {
-        d[i] = s[i];
-    }
-}
 
 int highestPriorityPendingLine(){
     unsigned int cause = getCAUSE();
@@ -151,8 +144,8 @@ void interruptHandler()
 
 
 #define DEV_SEM_BASE(line, dev) (((line) - 3) * 8 + (dev))
-#define TERM_TX_SEM(dev)  (32 + (dev))
-#define TERM_RX_SEM(dev)  (40 + (dev))
+#define TERM_TX_SEM(dev)  (40 + (dev))
+#define TERM_RX_SEM(dev)  (32 + (dev))
 
 static int getHighestPriorityDevice(unsigned int bitmap) {
     for (int i = 0; i < 8; i++) {
