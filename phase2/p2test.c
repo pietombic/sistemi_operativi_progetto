@@ -80,8 +80,7 @@ int sem_term_mut = 1,              /* for mutual exclusion on terminal */
     sem_endp8               = 0,   /* to signal demise of p8 */
     sem_endcreate[NOLEAVES] = {0}, /* for a p8 leaf to signal its creation */
     sem_blkp8               = 0,   /* to block p8 */
-    sem_blkp9               = 0,   /* to block p9 */
-    sem_testbinary           = 0;   /* to test binary semaphores */
+    sem_blkp9               = 0;   /* to block p9 */
 
 state_t p2state, p3state, p4state, p5state, p6state, p7state, p8rootstate, child1state, child2state, gchild1state,
     gchild2state, gchild3state, gchild4state, p9state, p10state, hp_p1state, hp_p2state;
@@ -115,11 +114,11 @@ void print(char *msg) {
     devregtr *base    = (devregtr *)(TERM0ADDR);
     devregtr *command = base + 3;
     devregtr  status;
+
     SYSCALL(PASSEREN, (int)&sem_term_mut, 0, 0); /* P(sem_term_mut) */
     while (*s != EOS) {
         devregtr value = PRINTCHR | (((devregtr)*s) << 8);
         status         = SYSCALL(DOIO, (int)command, (int)value, 0);
-
         if ((status & TERMSTATMASK) != RECVD) {
             PANIC();
         }
@@ -131,12 +130,12 @@ void print(char *msg) {
 
 /* TLB-Refill Handler */
 /* One can place debug calls here, but not calls to print */
-// void uTLB_RefillHandler() {
-//     setENTRYHI(0x80000000);
-//     setENTRYLO(0x00000000);
-//     TLBWR();
-//     LDST((state_t*) BIOSDATAPAGE);
-// }
+void uTLB_RefillHandler() {
+    setENTRYHI(0x80000000);
+    setENTRYLO(0x00000000);
+    TLBWR();
+    LDST((state_t*) BIOSDATAPAGE);
+}
 
 
 /*********************************************************************/
@@ -144,27 +143,25 @@ void print(char *msg) {
 /*                 p1 -- the root process                            */
 /*                                                                   */
 void test() {
-    SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0); /* V(sem_testsem)   */   
+    SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0); /* V(sem_testsem)   */
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0);
     SYSCALL(VERHOGEN, (int)&sem_testsem, 0, 0);
-    
 
     if (sem_testsem != 3) {
+        print("Error: wrong semaphore value\n");
         PANIC();
     }
 
     SYSCALL(PASSEREN, (int)&sem_testsem, 0, 0);
     SYSCALL(PASSEREN, (int)&sem_testsem, 0, 0);
     SYSCALL(PASSEREN, (int)&sem_testsem, 0, 0);
-    
+
     if (sem_testsem != 0) {
         print("Error: wrong semaphore value\n");
         PANIC();
     }
 
     print("p1 v(sem_testsem)\n");
-
-
 
     /* set up states of the other processes */
 
@@ -289,6 +286,7 @@ void test() {
     print("p3 is started\n");
 
     SYSCALL(PASSEREN, (int)&sem_endp3, 0, 0); /* P(sem_endp3)     */
+
     SYSCALL(CREATEPROCESS, (int)&hp_p1state, 10, (int)NULL);
     SYSCALL(CREATEPROCESS, (int)&hp_p2state, PROCESS_PRIO_HIGH, (int)NULL);
 
@@ -302,7 +300,9 @@ void test() {
     pFiveSupport.sup_exceptContext[PGFAULTEXCEPT].pc = (memaddr)p5mm;
 
     SYSCALL(CREATEPROCESS, (int)&p5state, PROCESS_PRIO_LOW, (int)&(pFiveSupport)); /* start p5     */
+
     SYSCALL(CREATEPROCESS, (int)&p6state, PROCESS_PRIO_LOW, (int)NULL); /* start p6		*/
+
     SYSCALL(CREATEPROCESS, (int)&p7state, PROCESS_PRIO_LOW, (int)NULL); /* start p7		*/
 
     p9pid = SYSCALL(CREATEPROCESS, (int)&p9state, PROCESS_PRIO_LOW, (int)NULL); /* start p7		*/
@@ -321,6 +321,7 @@ void test() {
         for (int i = 0; i < NOLEAVES; i++) {
             sem_endcreate[i] = 0;
         }
+
         p8pid = SYSCALL(CREATEPROCESS, (int)&p8rootstate, PROCESS_PRIO_LOW, (int)NULL);
 
         SYSCALL(PASSEREN, (int)&sem_endp8, 0, 0);
@@ -641,6 +642,7 @@ void p8root() {
     int grandchild;
 
     print("p8root starts\n");
+
     SYSCALL(CREATEPROCESS, (int)&child1state, PROCESS_PRIO_LOW, (int)NULL);
 
     SYSCALL(CREATEPROCESS, (int)&child2state, PROCESS_PRIO_LOW, (int)NULL);
@@ -691,7 +693,6 @@ void child2() {
 /*p8leaf -- code for leaf processes*/
 
 void p8leaf1() {
-    SYSCALL(VERHOGEN, (int)&sem_testbinary, 0, 0);
     print("leaf process (1) starts\n");
     SYSCALL(VERHOGEN, (int)&sem_endcreate[0], 0, 0);
     SYSCALL(PASSEREN, (int)&sem_blkp8, 0, 0);
@@ -699,7 +700,6 @@ void p8leaf1() {
 
 
 void p8leaf2() {
-    SYSCALL(VERHOGEN, (int)&sem_testbinary, 0, 0);
     print("leaf process (2) starts\n");
     SYSCALL(VERHOGEN, (int)&sem_endcreate[1], 0, 0);
     SYSCALL(PASSEREN, (int)&sem_blkp8, 0, 0);
@@ -709,12 +709,6 @@ void p8leaf2() {
 void p8leaf3() {
     print("leaf process (3) starts\n");
     SYSCALL(VERHOGEN, (int)&sem_endcreate[2], 0, 0);
-    if (sem_testbinary != 1) {
-        print("Error: binary semaphore value is not 1!\n");
-        PANIC();
-    }
-    SYSCALL(PASSEREN, (int)&sem_testbinary, 0, 0);
-    SYSCALL(PASSEREN, (int)&sem_testbinary, 0, 0);
     SYSCALL(PASSEREN, (int)&sem_blkp8, 0, 0);
 }
 
@@ -722,9 +716,7 @@ void p8leaf3() {
 void p8leaf4() {
     print("leaf process (4) starts\n");
     SYSCALL(VERHOGEN, (int)&sem_endcreate[3], 0, 0);
-
     SYSCALL(PASSEREN, (int)&sem_blkp8, 0, 0);
-
 }
 
 
