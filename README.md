@@ -39,11 +39,22 @@ The underlying list structures were designed and built following the robust Doub
 
 This phase was a highly rewarding and significant learning experience, as it marked the first time the entire team worked with and implemented this specific Kernel-style list model.
 
----
 
 ## Phase 2: Kernel
 
 Phase 2 implements the OS kernel: exception handler, scheduler, interrupt handler, and the ten system calls defined by the specification.
+
+### Folder structure
+
+The implementation is organized into several modules, each handling a specific part of the kernel:
+
+- **`main.c`**: The entry point of the kernel that invokes the initialization routine.
+- **`initial.c`**: Handles the kernel initialization, setting up the global state (ready queue, semaphores, process count), initializing the PCB and ASL layers from Phase 1, and creating the first process.
+- **`scheduler.c`**: Implements the priority-based round-robin scheduler. It selects the next process to run or manages the idle state (HALT, WAIT, or PANIC).
+- **`exception.c`**: Contains the unified exception handler that routes interrupts, system calls, and memory faults to their respective handlers.
+- **`interrupt.c`**: Manages all device interrupts (terminals, disks, etc.) and the pseudo-clock timer, performing the necessary V operations on device semaphores.
+- **`functions.c`**: Provides utility functions for process management, including recursive process termination (for `TERMPROCESS`), PID-based process lookup via tree traversal, and manual state copying.
+- **`headers/`**: Contains the internal headers for the Phase 2 modules.
 
 ### Scheduler
 
@@ -69,6 +80,15 @@ The unified entry point `exceptionHandler` reads the saved state from `BIOSDATAP
 | Other               | any other excCode       | `passUpOrDie(GENERALEXCEPT)`                                                          |
 
 `passUpOrDie` terminates the current process if it has no `p_supportStruct`, otherwise it delegates to the support level (phase 3) by loading the exception context stored in that structure.
+
+### Interrupt handler
+
+The `interruptHandler` manages all hardware and timer interrupts. It first updates the CPU time of the `currentProcess` using `STCK`.
+
+- **PLT (Processor Local Timer)**: When the time slice expires, the current process's state is saved, its time slice is reset, and it is re-inserted into the `readyQueue`. The scheduler is then called to pick the next process.
+- **Interval Timer (Pseudo-clock)**: Every 100ms, all processes blocked on the pseudo-clock semaphore (`deviceSemaphores[48]`) are unblocked and moved to the `readyQueue`.
+- **Device Interrupts**: For each device line (disks, flash, network, etc.), the handler identifies the interrupting device, acknowledges the interrupt (sending `ACK`), and unblocks the process waiting on the corresponding device semaphore, returning the device's status in `reg_a0`.
+- **Terminals**: Handled separately as they provide independent transmission (TX) and reception (RX) sub-devices, each with its own semaphore.
 
 ### System calls
 
