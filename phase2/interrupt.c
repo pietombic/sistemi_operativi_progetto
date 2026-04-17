@@ -135,7 +135,7 @@ void interruptHandler(void) {
       // processo in attesa dell'operazione di output e gli restituisce lo
       // stato del terminale tramite il registro a0.
       // TX -> dispositivo di trasmissione
-      if (txStatus != READY && txStatus != BUSY) {
+      if ((txStatus & 0xFF) != 0) {
 
         unsigned int savedStatus = TERM_TRANSM_STATUS(termBase);
         TERM_TRANSM_COMMAND(termBase) = ACK;
@@ -160,7 +160,7 @@ void interruptHandler(void) {
       // processo in attesa dell'operazione di input e gli restituisce lo
       // stato del terminale tramite il registro a0.
       // RX -> dispositivo di ricezione
-      if (rxStatus != READY && rxStatus != BUSY) {
+      if ((rxStatus & 0xFF) != 0) {
 
         unsigned int savedStatus = TERM_RECV_STATUS(termBase);
         TERM_RECV_COMMAND(termBase) = ACK;

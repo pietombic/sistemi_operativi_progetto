@@ -6,3 +6,5 @@ testchat
 .uriscv
 /.idea
 .pdf
+._*
+.DS_Store

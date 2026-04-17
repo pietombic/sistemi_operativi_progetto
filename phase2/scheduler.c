@@ -13,9 +13,8 @@ void scheduler() {
         //dispatching the ready process
         currentProcess = removeProcQ(&readyQueue);
         
-        //setting process timer
-        setTIMER(TIMESLICE); 
-
+        setTIMER(TIMESLICE);
+        STCK(start_time_current_quantum);
         LDST(&(currentProcess->p_s));
     }else if (processCount == 0) {
         klog_print("Scheduler HALT, no processes left\n");

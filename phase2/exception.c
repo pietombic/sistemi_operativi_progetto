@@ -17,42 +17,39 @@ void exceptionHandler() {
     unsigned int cause   = exceptionState->cause;
     unsigned int excCode = cause & CAUSE_EXCCODE_MASK;
 
-    //the exception was an interrupt 
+    /* interrupt */
     if (CAUSE_IS_INT(cause)) {
         interruptHandler();
         return;
     }
 
-    //passing up to the syscallhandler
+    /* ECALL (U-mode=8, M-mode=11): route to syscall handler.
+       Normalize cause to 11 so support handlers always see M-mode ECALL code. */
     if (excCode == 8 || excCode == 11) {
         exceptionState->pc_epc += WORDLEN;
+        exceptionState->cause = 11;
         systemCallHandler(exceptionState);
         return;
     }
 
-    /* memory access fault (instruction=1, load=5, store=7):
-       user-space address → page fault, kernel-space → general exception */
-    if (excCode == 1 || excCode == 5 || excCode == 7) {
-        int exType = (getBADVADDR() >= KUSEG) ? PGFAULTEXCEPT : GENERALEXCEPT;
-        passUpOrDie(exType, exceptionState);
-        return;
-    }
-
-    passUpOrDie(GENERALEXCEPT, exceptionState);
+    /* All other exceptions (TLB, access faults, illegal instr, etc.):
+       route based on BADVADDR — avoids depending on exact uRISCV TLB exception codes */
+    int exType = (getBADVADDR() >= KUSEG) ? PGFAULTEXCEPT : GENERALEXCEPT;
+    passUpOrDie(exType, exceptionState);
 }
 
 void systemCallHandler(state_t *exceptionState) {
     int service_code = (int) exceptionState->reg_a0;
     
-    //Controllo Kernel-mode per SYSCALL negative
-    if (service_code < 0) {
-        if ((exceptionState->status & MSTATUS_MPP_MASK) == MSTATUS_MPP_U) {
-            passUpOrDie(GENERALEXCEPT, exceptionState); 
-            return;
-        }
+    /* syscall number >= 1: non valido, passa up */
+    if (service_code >= 1) {
+        passUpOrDie(GENERALEXCEPT, exceptionState);
+        return;
     }
 
-    if (service_code > 1) {
+    /* syscall negativa invocata in user-mode: privilegio insufficiente */
+    if ((exceptionState->status & MSTATUS_MPP_MASK) == MSTATUS_MPP_U) {
+        exceptionState->cause = (exceptionState->cause & ~GETEXECCODE) | (PRIVINSTR << CAUSESHIFT);
         passUpOrDie(GENERALEXCEPT, exceptionState);
         return;
     }

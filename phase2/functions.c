@@ -89,11 +89,11 @@ void recursiveTerminateProcess(pcb_t *target){
 
         pcb_t *removed = outBlocked(target);
         if (removed) {
-
             if (isSoftBlockSemaphore(semAdd)) {
                 softBlockCount--;
+            } else {
+                (*semAdd)++;
             }
-            (*semAdd)++;
         }
     }
 
@@ -101,6 +101,7 @@ void recursiveTerminateProcess(pcb_t *target){
     if (target == currentProcess) {
         currentProcess = NULL;
     }
+    outChild(target);  /* rimuove target dalla lista figli del genitore prima di liberarlo */
     freePcb(target);
     processCount--;
 }
