@@ -12,6 +12,40 @@
 #include "headers/klog.h"
 #include "headers/functions.h"
 
+/* TLB-Refill event handler: gestisce cache miss TLB (entry non trovata nel TLB).
+   Trova la PTE corretta nella page table del processo corrente e la scrive nel TLB.
+   Deve restare in questo file (exceptions.c) per spec 12.2. */
+void uTLB_RefillHandler(void) {
+    /* Stato salvato si trova all'inizio del BIOS Data Page */
+    state_t *savedState = (state_t *) BIOSDATAPAGE;
+
+    /* Estrai VPN dalla EntryHi salvata */
+    unsigned int entryHi = savedState->entry_hi;
+    unsigned int vpn     = (entryHi & ENTRYHI_VPN_MASK) >> VPNSHIFT;
+
+    /* EntryHi bits 29:12 = segment-relative VPN (not absolute VPN).
+       For KUSEG (0x80000000-0xBFFFFFFF):
+         page 0..30: segment-relative VPN = 0..30
+         stack page 31: VA 0xBFFFF000 → bits 29:12 = 0x3FFFF */
+    int pageIndex;
+    if (vpn == 0x3FFFF) {
+        pageIndex = MAXPAGES - 1;
+    } else {
+        pageIndex = (int)vpn;
+    }
+
+    /* Leggi la PTE dalla page table del processo corrente */
+    pteEntry_t *pte = &currentProcess->p_supportStruct->sup_privatePgTbl[pageIndex];
+
+    /* Scrivi la PTE nel TLB */
+    setENTRYHI(pte->pte_entryHI);
+    setENTRYLO(pte->pte_entryLO);
+    TLBWR();
+
+    /* Ritorna al processo per ritentare l'istruzione che ha causato il refill */
+    LDST(savedState);
+}
+
 void exceptionHandler() {
     state_t *exceptionState = (state_t *) BIOSDATAPAGE;
     unsigned int cause   = exceptionState->cause;
