@@ -15,6 +15,7 @@
 #include "headers/sysSupport.h"
 #include <uriscv/liburiscv.h>
 #include <uriscv/cpu.h>
+#include "headers/klog.h"
 
 static swap_t swapPool[POOLSIZE];
 static int swapPoolSem;
@@ -91,9 +92,14 @@ void pager(void) {
     unsigned int cause   = sup->sup_exceptState[PGFAULTEXCEPT].cause;
     unsigned int excCode = cause & CAUSE_EXCCODE_MASK;
 
-    /* EXC_MOD=24: TLB-Modification (write to read-only page) — program error.
-       Only EXC_UTLBL=27 and EXC_UTLBS=28 are valid TLB-Invalid faults we handle. */
-    if (excCode != EXC_UTLBL && excCode != EXC_UTLBS) {
+    klog_print("pager excCode="); klog_print_dec(excCode);
+    klog_print(" asid="); klog_print_dec(sup->sup_asid); klog_print("\n");
+
+    /* Only TLB-Modification (EXC_MOD=24) is a true program error.
+       All other faults that arrive via PGFAULTEXCEPT (EXC_TLBL=25, EXC_TLBS=26,
+       EXC_UTLBL=27, EXC_UTLBS=28, and RISC-V page fault codes) need page loading. */
+    if (excCode == EXC_MOD) {
+        klog_print("pager: TLB-Mod fault -> fatalFault\n");
         fatalFault(sup);
         return;
     }
@@ -132,11 +138,16 @@ void pager(void) {
 
     /* Load requested page from flash into the frame */
     int currentAsid = sup->sup_asid;
-    if (flashIO(currentAsid, pageIndex, framePhysAddr, FLASHREAD) != FLASHREADY) {
+    klog_print("pager: flash read asid="); klog_print_dec(currentAsid);
+    klog_print(" page="); klog_print_dec(pageIndex); klog_print("\n");
+    int rstat = flashIO(currentAsid, pageIndex, framePhysAddr, FLASHREAD);
+    if (rstat != FLASHREADY) {
+        klog_print("pager: flash read FAIL status="); klog_print_dec(rstat); klog_print("\n");
         SYSCALL(VERHOGEN, (int)&swapPoolSem, 0, 0);
         fatalFault(sup);
         return;
     }
+    klog_print("pager: flash read OK\n");
 
     /* Update swap pool metadata */
     swapPool[frameIndex].sw_asid   = currentAsid;

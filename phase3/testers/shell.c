@@ -28,6 +28,7 @@ static prog_entry_t programs[] = {
     {"uname",     5},
     {"date",      6},
     {"sl",        7},
+    {"calc",      8},
     {"",          0}   /* sentinel */
 };
 

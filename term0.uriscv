@@ -1,1 +1,37 @@
+PandOS shell - type 'help' for commands
+$ help
+Commands: echo calc fibEight fibEleven uname date sl exit
+$ calc
+calc: enter expression (e.g. 3 + 4), empty line to quit
+> 3 + 6
+9
+> 6 * 9
+54
+> 10 / 2
+5
+> 45 * 98
+4410
+> 
+$ echo
+Enter a string: Davoli vaffanculo
+
+Davoli vaffancul
+$ echo ciao
+echo ciao: command not found
+$ echo 
+echo : command not found
+$ echo
+Enter a string: ciaooooooooooooooooo
+
+ciaooooooooooooo
+$ echo
+Enter a string: caioooooooooooooooooooooooooooooooooooooooooooo
+
+caiooooooooooooo0
+$ quir
+quir: command not found
+$ quit
+quit: command not found
+$ exit
+Bye!
 System halted 
