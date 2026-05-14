@@ -115,4 +115,80 @@ The ten system calls are dispatched by `systemCallHandler`, which first checks t
 
 ---
 
+## Phase 3: Support Level
+
+Phase 3 implements the Support Level: the layer between the kernel and user processes (U-proc). It provides virtual memory via demand paging, terminal I/O, and process management for user-level programs.
+
+### Folder structure
+
+- **`initProc.c`**: Instantiator process (`test()`). Initializes shared data structures, launches the shell (ASID 1), and waits for it to terminate.
+- **`vmSupport.c`**: Pager — TLB exception handler that implements demand paging using a swap pool backed by flash devices.
+- **`sysSupport.c`**: General exception handler that dispatches positive syscalls (SYS2–SYS6) and handles program traps from U-procs.
+- **`headers/`**: Internal headers for the Phase 3 modules.
+
+### Instantiator process
+
+`test()` is the entry point of the Support Level. It runs as a kernel-mode process and performs the following startup sequence:
+
+1. **`initSwapStructs()`**: initializes the 16-frame swap pool and its mutex semaphore.
+2. Initializes all mutual-exclusion semaphores to 1 (free): one per flash device (`flashMutex[]`), one for terminal TX, one for terminal RX.
+3. Zeroes the synchronization semaphores: `masterSemaphore` (test waits on this for the shell) and `shellSemaphore` (shell waits on this for each child program).
+4. Launches the shell as a U-proc with ASID 1 via `launchUproc(1)`.
+5. Blocks on `masterSemaphore` until the shell signals it on termination.
+6. Terminates via `TERMPROCESS`.
+
+Each U-proc is given a `support_t` containing its private 32-entry page table and the two exception handler contexts (TLB and general). Both handlers run in kernel-mode with interrupts enabled.
+
+### Demand paging (Pager)
+
+The pager implements on-demand loading of pages from flash into a fixed pool of 16 physical frames (the swap pool), located at `SWAPPOOLSTART = 0x20020000`.
+
+Each U-proc has a virtual address space of 32 pages (128 KB):
+- Pages 0–30: text and data, VPN `0x80000 + i` (KUSEG)
+- Page 31: stack, VPN `0xBFFFF` (top of KUSEG)
+
+All pages start as invalid (V=0, D=1). On the first access the hardware generates a TLB exception, which the kernel forwards to `pager()` via `passUpOrDie`.
+
+**Page fault handling algorithm:**
+
+| Step | Action |
+| ---- | ------ |
+| 1 | Read the faulting VPN from `sup_exceptState[PGFAULTEXCEPT].entry_hi` |
+| 2 | Acquire `swapPoolSem` (mutex protecting the entire swap pool) |
+| 3 | Select victim frame with **FIFO round-robin** (`swapFrameClock`) |
+| 4 | If occupied: invalidate its PTE (V=0), flush from TLB atomically, write frame to flash (eviction) |
+| 5 | Read the requested page from flash into the frame |
+| 6 | Update swap pool metadata (ASID, page number, PTE pointer) |
+| 7 | Update PTE: set V=1, D=1, PFN = physical address of frame |
+| 8 | Update TLB entry in place (TLBP + TLBWI) if already cached |
+| 9 | Release `swapPoolSem` |
+| 10 | `LDST` back to the faulting instruction (now succeeds) |
+
+TLB-Modification faults (write to a read-only page) are treated as program errors and trigger process termination.
+
+**Flash I/O** is performed via `DOIO` (SYS5 of the kernel), with each device protected by its own `flashMutex`. Flash device *i* stores the backing image for the U-proc with ASID *i+1*. The block index in the flash corresponds directly to the logical page number.
+
+### System calls
+
+User processes invoke syscalls with a positive number in `reg_a0` via `ECALL`. The general exception handler (`supportGeneralExHandler`) checks the exception code and dispatches to the correct handler:
+
+| Code | Name | Description |
+| ---- | ---- | ----------- |
+| 2 | `TERMINATE` | U-proc terminates normally. Signals `masterSemaphore` (ASID 1) or `shellSemaphore` (ASID 2–8), then calls `TERMPROCESS`. |
+| 4 | `WRITETERMINAL` | Writes a string of up to 128 chars to terminal 0. `reg_a1` = virtual address of string, `reg_a2` = length. Returns chars written or negative error code. Protected by `termMutexTX`. |
+| 5 | `READTERMINAL` | Reads a line from terminal 0 into a buffer at `reg_a1`. Stops on newline or 128 chars. Returns chars read or negative error code. Protected by `termMutexRX`. |
+| 6 | `EXECUTE` | Shell-only (ASID 1). Initializes a new U-proc with the ASID in `reg_a1` (2–UPROCMAX), creates it via `CREATEPROCESS`, then blocks on `shellSemaphore` until the child terminates. |
+
+Any unknown syscall number or non-syscall exception (program trap) causes the process to be terminated and its parent unblocked.
+
+### Notable implementation choices
+
+- **Separate TX/RX mutexes**: terminal 0 has independent transmit and receive channels, so `termMutexTX` and `termMutexRX` are kept separate. This allows a process to read and another to write simultaneously without unnecessary blocking.
+- **Atomic TLB invalidation**: `updateTLBEntry` disables interrupts during the TLBP + TLBWI sequence to prevent a concurrent TLB access between the PTE invalidation and the TLB flush, which could expose a stale valid entry to another process.
+- **FIFO eviction without dirty-bit optimization**: all frames are always written back to flash on eviction (D=1 is set unconditionally). This simplifies the pager at the cost of one extra flash write per eviction for pages that were not modified.
+- **Shell/child synchronization via semaphore**: `sys6_execute` blocks the shell on `shellSemaphore` (P) and the child signals it (V) in `sys2_terminate` or `programTrapHandler` before calling `TERMPROCESS`. This ensures the shell never proceeds to the next command before the previous program has fully terminated.
+- **ASID-based flash assignment**: U-proc with ASID *i* uses flash device *i−1*. The pager computes the device address as `START_DEVREG + (IL_FLASH − IL_DISK) * 0x80 + (asid−1) * 0x10`, following the uRISCV device register layout.
+
+---
+
 Stay hungry, stay foolish
