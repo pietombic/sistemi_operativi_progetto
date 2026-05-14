@@ -1,37 +1,37 @@
 PandOS shell - type 'help' for commands
 $ help
 Commands: echo calc fibEight fibEleven uname date sl exit
+$ echo
+Enter a string: ciao
+
+ciao
+
 $ calc
 calc: enter expression (e.g. 3 + 4), empty line to quit
-> 3 + 6
-9
-> 6 * 9
-54
-> 10 / 2
-5
-> 45 * 98
-4410
+> 4 * 5
+20
+> fibHeight
+Error: unknown operator (use + - * /)
 > 
-$ echo
-Enter a string: Davoli vaffanculo
-
-Davoli vaffancul
-$ echo ciao
-echo ciao: command not found
-$ echo 
-echo : command not found
-$ echo
-Enter a string: ciaooooooooooooooooo
-
-ciaooooooooooooo
-$ echo
-Enter a string: caioooooooooooooooooooooooooooooooooooooooooooo
-
-caiooooooooooooo0
-$ quir
-quir: command not found
-$ quit
-quit: command not found
+$ fibEight
+Recursive Fibanaci (8) Test starts
+Recursion Concluded
+Recursion Concluded Successfully
+$ fibEleven
+Recursive Fibanaci (11) Test starts
+Recursion Concluded
+Recursion Concluded Successfully
+$ uname
+PandOSsh
+$ date
+Sat  5 Nov 06:15:00 PST 1955
+$ sl
+     ++      +------ 
+     ||      |+-+ |  
+   /---------|| | |  
+  + ========  +-+ |  
+ _|--O========O~\-+ 
+//// \_/      \_/  
 $ exit
 Bye!
 System halted 
